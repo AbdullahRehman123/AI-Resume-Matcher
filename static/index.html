@@ -30,26 +30,61 @@
     margin: 0 auto;
     padding: 48px 20px 80px;
   }
-  header {
-    margin-bottom: 32px;
+  header { margin-bottom: 24px; }
+  h1 { font-size: 1.6rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+  .mode-toggle {
+    display: flex;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 4px;
+    margin-bottom: 20px;
+    gap: 4px;
   }
-  h1 {
-    font-size: 1.6rem;
-    margin: 0 0 6px;
-    letter-spacing: -0.01em;
-  }
-  header p {
-    margin: 0;
+  .mode-btn {
+    flex: 1;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    font-size: 0.9rem;
+    font-weight: 600;
     color: var(--muted);
-    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
   }
+  .mode-btn.active { background: var(--accent); color: #fff; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
   .upload-card {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 28px;
   }
+  label.field-label {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    margin-bottom: 18px;
+    background: #fff;
+    color: var(--text);
+  }
   .drop-zone {
+    display: block;
     border: 1.5px dashed var(--border);
     border-radius: var(--radius);
     padding: 32px 20px;
@@ -57,22 +92,14 @@
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease;
   }
-  .drop-zone:hover,
-  .drop-zone.dragover {
+  .drop-zone:hover, .drop-zone.dragover {
     border-color: var(--accent);
     background: var(--accent-light);
   }
   .drop-zone input { display: none; }
-  .drop-zone .filename {
-    margin-top: 10px;
-    font-size: 0.9rem;
-    color: var(--accent);
-    font-weight: 600;
-  }
-  .drop-zone .hint {
-    color: var(--muted);
-    font-size: 0.85rem;
-  }
+  .drop-zone .filename { margin-top: 10px; font-size: 0.9rem; color: var(--accent); font-weight: 600; }
+  .drop-zone .hint { color: var(--muted); font-size: 0.85rem; }
+
   button.submit {
     margin-top: 18px;
     width: 100%;
@@ -86,85 +113,29 @@
     cursor: pointer;
     transition: opacity 0.15s ease;
   }
-  button.submit:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  button.submit:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-  .status {
-    margin-top: 14px;
-    font-size: 0.9rem;
-    color: var(--muted);
-  }
-  .status.error {
-    color: var(--danger);
-  }
-  #results {
-    margin-top: 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  .result-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 22px;
-  }
-  .result-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 10px;
-  }
-  .result-header h3 {
-    margin: 0;
-    font-size: 1.05rem;
-  }
-  .score {
-    font-size: 0.85rem;
-    color: var(--muted);
-    white-space: nowrap;
-  }
+  button.submit:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.submit:hover:not(:disabled) { opacity: 0.9; }
+
+  .status { margin-top: 14px; font-size: 0.9rem; color: var(--muted); }
+  .status.error { color: var(--danger); }
+
+  #results { margin-top: 28px; display: flex; flex-direction: column; gap: 16px; }
+  .result-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+  .result-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+  .result-header h3 { margin: 0; font-size: 1.05rem; }
+  .result-header .sub { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+  .score { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
   .verdict {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-transform: capitalize;
-    margin-bottom: 12px;
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 0.78rem; font-weight: 600; text-transform: capitalize; margin-bottom: 12px;
   }
   .verdict.strong { background: var(--accent-light); color: var(--accent); }
   .verdict.partial { background: #fdf3e2; color: #92620b; }
   .verdict.weak { background: var(--danger-light); color: var(--danger); }
-  .explanation {
-    font-size: 0.92rem;
-    color: var(--text);
-    margin-bottom: 14px;
-  }
-  .skills-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 10px;
-  }
-  .skills-row .label {
-    width: 100%;
-    font-size: 0.78rem;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    margin-bottom: 4px;
-  }
-  .chip {
-    font-size: 0.8rem;
-    padding: 3px 9px;
-    border-radius: 6px;
-  }
+  .explanation { font-size: 0.92rem; color: var(--text); margin-bottom: 14px; }
+  .skills-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .skills-row .label { width: 100%; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
+  .chip { font-size: 0.8rem; padding: 3px 9px; border-radius: 6px; }
   .chip.matched { background: var(--accent-light); color: var(--accent); }
   .chip.missing { background: var(--danger-light); color: var(--danger); }
 </style>
@@ -176,36 +147,111 @@
     <p>Upload a CV (PDF or DOCX) to see how it matches against open roles.</p>
   </header>
 
-  <div class="upload-card">
-    <label class="drop-zone" id="dropZone">
-      <input type="file" id="fileInput" accept=".pdf,.docx">
-      <div class="hint">Click to choose a file, or drag one here</div>
-      <div class="filename" id="fileName"></div>
-    </label>
-    <button class="submit" id="submitBtn" disabled>Match against jobs</button>
-    <div class="status" id="status"></div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="singleModeBtn" data-mode="single">Single CV</button>
+    <button class="mode-btn" id="batchModeBtn" data-mode="batch">Batch CVs</button>
+  </div>
+
+  <!-- SINGLE CV MODE -->
+  <div class="panel active" id="singlePanel">
+    <div class="upload-card">
+      <label class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".pdf,.docx">
+        <div class="hint">Click to choose a file, or drag one here</div>
+        <div class="filename" id="fileName"></div>
+      </label>
+      <button class="submit" id="submitBtn" disabled>Match against jobs</button>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+  <!-- BATCH CV MODE -->
+  <div class="panel" id="batchPanel">
+    <div class="upload-card">
+      <label class="field-label" for="jobSelect">Match against job</label>
+      <select id="jobSelect"><option value="">Loading jobs...</option></select>
+
+      <label class="drop-zone" id="batchDropZone">
+        <input type="file" id="batchFileInput" accept=".pdf,.docx" multiple>
+        <div class="hint">Click to choose files, or drag many CVs here</div>
+        <div class="filename" id="batchFileNames"></div>
+      </label>
+      <button class="submit" id="batchSubmitBtn" disabled>Upload &amp; match batch</button>
+      <div class="status" id="batchStatus"></div>
+    </div>
   </div>
 
   <div id="results"></div>
 </div>
 
 <script>
+  // ---------- Mode toggle ----------
+  const singleModeBtn = document.getElementById('singleModeBtn');
+  const batchModeBtn = document.getElementById('batchModeBtn');
+  const singlePanel = document.getElementById('singlePanel');
+  const batchPanel = document.getElementById('batchPanel');
+  const resultsEl = document.getElementById('results');
+
+  function setMode(mode) {
+    const isSingle = mode === 'single';
+    singleModeBtn.classList.toggle('active', isSingle);
+    batchModeBtn.classList.toggle('active', !isSingle);
+    singlePanel.classList.toggle('active', isSingle);
+    batchPanel.classList.toggle('active', !isSingle);
+    resultsEl.innerHTML = '';
+    stopPolling();
+    if (!isSingle) loadJobs();
+  }
+  singleModeBtn.addEventListener('click', () => setMode('single'));
+  batchModeBtn.addEventListener('click', () => setMode('batch'));
+
+  // ---------- Shared result rendering ----------
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+  function verdictClass(verdict) {
+    if (verdict.includes('strong')) return 'strong';
+    if (verdict.includes('partial')) return 'partial';
+    return 'weak';
+  }
+  function skillsRow(label, skills, kind) {
+    if (!skills || !skills.length) return '';
+    const chips = skills.map(s => `<span class="chip ${kind}">${escapeHtml(s)}</span>`).join('');
+    return `<div class="skills-row"><div class="label">${label}</div>${chips}</div>`;
+  }
+  function resultCardHtml(r, title, subtitle) {
+    return `
+      <div class="result-card">
+        <div class="result-header">
+          <div>
+            <h3>${escapeHtml(title)}</h3>
+            ${subtitle ? `<div class="sub">${escapeHtml(subtitle)}</div>` : ''}
+          </div>
+          <span class="score">similarity ${(r.similarity_score * 100).toFixed(0)}%</span>
+        </div>
+        <span class="verdict ${verdictClass(r.verdict)}">${escapeHtml(r.verdict)}</span>
+        <p class="explanation">${escapeHtml(r.explanation)}</p>
+        ${skillsRow('Matched', r.matched_skills, 'matched')}
+        ${skillsRow('Missing', r.missing_skills, 'missing')}
+      </div>
+    `;
+  }
+
+  // ---------- SINGLE CV MODE ----------
   const fileInput = document.getElementById('fileInput');
   const dropZone = document.getElementById('dropZone');
   const fileName = document.getElementById('fileName');
   const submitBtn = document.getElementById('submitBtn');
   const statusEl = document.getElementById('status');
-  const resultsEl = document.getElementById('results');
 
   let selectedFile = null;
 
   fileInput.addEventListener('change', () => {
     if (fileInput.files.length) handleFile(fileInput.files[0]);
   });
-
-  ['dragover', 'dragleave', 'drop'].forEach(evt => {
-    dropZone.addEventListener(evt, e => e.preventDefault());
-  });
+  ['dragover', 'dragleave', 'drop'].forEach(evt => dropZone.addEventListener(evt, e => e.preventDefault()));
   dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
   dropZone.addEventListener('drop', e => {
@@ -224,7 +270,6 @@
 
   submitBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
-
     submitBtn.disabled = true;
     submitBtn.textContent = 'Matching...';
     statusEl.textContent = '';
@@ -236,14 +281,16 @@
 
     try {
       const res = await fetch('/match', { method: 'POST', body: formData });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Request failed (${res.status})`);
       }
-
       const results = await res.json();
-      renderResults(results);
+      if (!results.length) {
+        statusEl.textContent = 'No jobs to match against yet.';
+      } else {
+        resultsEl.innerHTML = results.map(r => resultCardHtml(r, r.job_title, null)).join('');
+      }
     } catch (err) {
       statusEl.textContent = err.message || 'Something went wrong.';
       statusEl.className = 'status error';
@@ -253,42 +300,134 @@
     }
   });
 
-  function renderResults(results) {
-    if (!results.length) {
-      statusEl.textContent = 'No jobs to match against yet.';
+  // ---------- BATCH CV MODE ----------
+  const jobSelect = document.getElementById('jobSelect');
+  const batchFileInput = document.getElementById('batchFileInput');
+  const batchDropZone = document.getElementById('batchDropZone');
+  const batchFileNames = document.getElementById('batchFileNames');
+  const batchSubmitBtn = document.getElementById('batchSubmitBtn');
+  const batchStatus = document.getElementById('batchStatus');
+
+  let selectedBatchFiles = [];
+  let pollTimer = null;
+
+  async function loadJobs() {
+    try {
+      const res = await fetch('/jobs');
+      const jobs = await res.json();
+      if (!jobs.length) {
+        jobSelect.innerHTML = '<option value="">No jobs yet - add one via POST /jobs</option>';
+        return;
+      }
+      jobSelect.innerHTML = jobs.map(j => `<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('');
+    } catch {
+      jobSelect.innerHTML = '<option value="">Could not load jobs</option>';
+    }
+  }
+
+  batchFileInput.addEventListener('change', () => {
+    if (batchFileInput.files.length) handleBatchFiles(Array.from(batchFileInput.files));
+  });
+  ['dragover', 'dragleave', 'drop'].forEach(evt => batchDropZone.addEventListener(evt, e => e.preventDefault()));
+  batchDropZone.addEventListener('dragover', () => batchDropZone.classList.add('dragover'));
+  batchDropZone.addEventListener('dragleave', () => batchDropZone.classList.remove('dragover'));
+  batchDropZone.addEventListener('drop', e => {
+    batchDropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleBatchFiles(Array.from(e.dataTransfer.files));
+  });
+
+  function handleBatchFiles(files) {
+    selectedBatchFiles = files;
+    batchFileNames.textContent = files.length === 1 ? files[0].name : `${files.length} files selected`;
+    batchSubmitBtn.disabled = false;
+    batchStatus.textContent = '';
+    batchStatus.className = 'status';
+    resultsEl.innerHTML = '';
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  batchSubmitBtn.addEventListener('click', async () => {
+    const jobId = jobSelect.value;
+    if (!jobId) {
+      batchStatus.textContent = 'Select a job to match against first.';
+      batchStatus.className = 'status error';
       return;
     }
+    if (!selectedBatchFiles.length) return;
 
-    resultsEl.innerHTML = results.map(r => `
-      <div class="result-card">
-        <div class="result-header">
-          <h3>${escapeHtml(r.job_title)}</h3>
-          <span class="score">similarity ${(r.similarity_score * 100).toFixed(0)}%</span>
-        </div>
-        <span class="verdict ${verdictClass(r.verdict)}">${escapeHtml(r.verdict)}</span>
-        <p class="explanation">${escapeHtml(r.explanation)}</p>
-        ${skillsRow('Matched', r.matched_skills, 'matched')}
-        ${skillsRow('Missing', r.missing_skills, 'missing')}
-      </div>
-    `).join('');
+    batchSubmitBtn.disabled = true;
+    batchStatus.textContent = 'Uploading batch...';
+    batchStatus.className = 'status';
+    resultsEl.innerHTML = '';
+
+    const formData = new FormData();
+    selectedBatchFiles.forEach(f => formData.append('files', f));
+
+    try {
+      const res = await fetch('/candidates/batch', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Upload failed (${res.status})`);
+      }
+      const { batch_id, queued, skipped } = await res.json();
+      batchStatus.textContent = `Queued ${queued} CV(s)${skipped ? `, skipped ${skipped}` : ''}. Extracting...`;
+      pollBatchStatus(batch_id, jobId);
+    } catch (err) {
+      batchStatus.textContent = err.message || 'Something went wrong.';
+      batchStatus.className = 'status error';
+      batchSubmitBtn.disabled = false;
+    }
+  });
+
+  function pollBatchStatus(batchId, jobId) {
+    stopPolling();
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/candidates/batch/${batchId}`);
+        if (!res.ok) throw new Error('Could not check batch status');
+        const { total, status_counts } = await res.json();
+        const pending = status_counts.pending || 0;
+
+        batchStatus.textContent = `Extracting: ${total - pending}/${total} done` +
+          (status_counts.rejected ? `, ${status_counts.rejected} rejected` : '') +
+          (status_counts.failed ? `, ${status_counts.failed} failed` : '');
+
+        if (pending === 0) {
+          stopPolling();
+          await fetchBatchResults(jobId, batchId);
+        }
+      } catch (err) {
+        stopPolling();
+        batchStatus.textContent = err.message || 'Something went wrong while polling.';
+        batchStatus.className = 'status error';
+        batchSubmitBtn.disabled = false;
+      }
+    }, 2000);
   }
 
-  function skillsRow(label, skills, kind) {
-    if (!skills || !skills.length) return '';
-    const chips = skills.map(s => `<span class="chip ${kind}">${escapeHtml(s)}</span>`).join('');
-    return `<div class="skills-row"><div class="label">${label}</div>${chips}</div>`;
-  }
-
-  function verdictClass(verdict) {
-    if (verdict.includes('strong')) return 'strong';
-    if (verdict.includes('partial')) return 'partial';
-    return 'weak';
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+  async function fetchBatchResults(jobId, batchId) {
+    batchStatus.textContent = 'Ranking candidates...';
+    try {
+      const res = await fetch(`/jobs/${jobId}/match-batch/${batchId}?top_n=20`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Ranking failed (${res.status})`);
+      }
+      const results = await res.json();
+      batchStatus.textContent = `Done - showing top ${results.length} candidate(s).`;
+      batchStatus.className = 'status';
+      resultsEl.innerHTML = results.length
+        ? results.map(r => resultCardHtml(r, r.candidate_name || r.filename, r.filename)).join('')
+        : '<p class="status">No extracted candidates matched.</p>';
+    } catch (err) {
+      batchStatus.textContent = err.message || 'Something went wrong.';
+      batchStatus.className = 'status error';
+    } finally {
+      batchSubmitBtn.disabled = false;
+    }
   }
 </script>
 </body>
