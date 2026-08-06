@@ -1,4 +1,4 @@
-# CV-Job Matcher (English, v0.1)
+# AI Resume Matcher (English, v0.1)
 
 Upload a CV (PDF or DOCX), get it matched against job postings with a
 similarity score and a plain-language explanation of fit.

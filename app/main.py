@@ -2,6 +2,7 @@
 
 import logging
 import tempfile
+import uuid
 from pathlib import Path
 from typing import List
 
@@ -12,11 +13,15 @@ from sqlalchemy.orm import Session
 
 from app.logging_config import setup_logging
 from app.database import get_db, init_db
-from app.orm_models import JobPosting as JobPostingORM
+from app.orm_models import JobPosting as JobPostingORM, Candidate
 from app.parser import extract_text
 from app.extractor import extract_structured_data
-from app.matcher import match_cv_to_job
-from app.schemas import JobRequirements, JobCreate, JobUpdate, JobOut, MatchResult
+from app.matcher import match_cv_to_job, rank_candidates_by_similarity, explain_match, compute_skill_overlap
+from app.tasks import extract_candidate_task
+from app.schemas import (
+    JobRequirements, JobCreate, JobUpdate, JobOut, MatchResult,
+    CVData, BatchUploadResponse, BatchStatusResponse, CandidateMatchResult,
+)
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -135,6 +140,129 @@ async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db)):
     results = [match_cv_to_job(cv_data, job) for job in jobs]
     results.sort(key=lambda r: r.similarity_score, reverse=True)
     logger.info("Completed matching for %s against %d jobs", file.filename, len(jobs))
+    return results
+
+
+@app.post("/candidates/batch", response_model=BatchUploadResponse)
+async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
+    """Upload many CVs at once. Text is parsed synchronously (fast, local),
+    but LLM extraction is queued as a background task per candidate -
+    this endpoint returns immediately, it doesn't wait for extraction."""
+    batch_id = str(uuid.uuid4())
+    queued, skipped = 0, 0
+
+    for file in files:
+        suffix = Path(file.filename).suffix.lower()
+        if suffix not in (".pdf", ".docx"):
+            logger.warning("Skipping unsupported file in batch: %s", file.filename)
+            skipped += 1
+            continue
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
+
+        try:
+            raw_text = extract_text(tmp_path)
+        except ValueError as e:
+            logger.warning("Skipping %s in batch - %s", file.filename, e)
+            skipped += 1
+            continue
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+        candidate = Candidate(
+            batch_id=batch_id, filename=file.filename, raw_text=raw_text, status="pending"
+        )
+        db.add(candidate)
+        db.commit()
+        db.refresh(candidate)
+
+        extract_candidate_task.delay(candidate.id)
+        queued += 1
+
+    logger.info("Batch %s: queued %d candidates, skipped %d", batch_id, queued, skipped)
+    return BatchUploadResponse(batch_id=batch_id, queued=queued, skipped=skipped)
+
+
+@app.get("/candidates/batch/{batch_id}", response_model=BatchStatusResponse)
+async def get_batch_status(batch_id: str, db: Session = Depends(get_db)):
+    """Poll this while extraction runs in the background."""
+    candidates = db.query(Candidate).filter(Candidate.batch_id == batch_id).all()
+    if not candidates:
+        raise HTTPException(404, "Batch not found")
+
+    status_counts: dict = {}
+    for c in candidates:
+        status_counts[c.status] = status_counts.get(c.status, 0) + 1
+
+    return BatchStatusResponse(batch_id=batch_id, total=len(candidates), status_counts=status_counts)
+
+
+@app.get("/jobs/{job_id}/match-batch/{batch_id}", response_model=List[CandidateMatchResult])
+async def match_batch_to_job(
+    job_id: int, batch_id: str, top_n: int = 20, db: Session = Depends(get_db)
+):
+    """Rank every extracted candidate in a batch against a job using cheap
+    local embeddings, then only run the expensive LLM explanation on the
+    top_n shortlist - not the whole batch."""
+    job_orm = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
+    if not job_orm:
+        raise HTTPException(404, "Job not found")
+
+    job = JobRequirements(
+        title=job_orm.title,
+        description=job_orm.description,
+        required_skills=job_orm.required_skills or [],
+        min_years_experience=job_orm.min_years_experience,
+    )
+
+    candidates_orm = (
+        db.query(Candidate)
+        .filter(Candidate.batch_id == batch_id, Candidate.status == "extracted")
+        .all()
+    )
+    if not candidates_orm:
+        raise HTTPException(400, "No extracted candidates in this batch yet - check /candidates/batch/{batch_id} for status.")
+
+    cv_data_list = [
+        CVData(
+            name=c.name, email=c.email, phone=c.phone,
+            skills=c.skills or [], years_experience=c.years_experience,
+            job_titles=c.job_titles or [], education=c.education or [],
+            summary=c.summary, raw_text=c.raw_text,
+        )
+        for c in candidates_orm
+    ]
+
+    scores = rank_candidates_by_similarity(cv_data_list, job)
+
+    # Pair each candidate/CVData/score explicitly by index, then sort together -
+    # avoids relying on object identity to map results back to a candidate.
+    ranked = sorted(
+        zip(candidates_orm, cv_data_list, scores),
+        key=lambda triple: triple[2],
+        reverse=True,
+    )
+    shortlist = ranked[:top_n]
+    logger.info("Shortlisted %d of %d candidates for job '%s'", len(shortlist), len(ranked), job.title)
+
+    results = []
+    for candidate_orm, cv_data, score in shortlist:
+        details = explain_match(cv_data, job)
+        matched, missing = compute_skill_overlap(cv_data.skills, job.required_skills)
+        results.append(CandidateMatchResult(
+            job_title=job.title,
+            similarity_score=score,
+            verdict=details["verdict"],
+            explanation=details["explanation"],
+            matched_skills=matched,
+            missing_skills=missing,
+            candidate_id=candidate_orm.id,
+            candidate_name=cv_data.name,
+            filename=candidate_orm.filename,
+        ))
+
     return results
 
 

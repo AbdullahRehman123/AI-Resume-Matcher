@@ -30,4 +30,4 @@ celery_app.conf.update(
 )
 
 # Make sure tasks.py gets registered with this app
-import app.tasks  # noqa: E402,F401
+import app.tasks  # noqa: E402,F401 
