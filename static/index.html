@@ -173,7 +173,7 @@
 
       <label class="drop-zone" id="batchDropZone">
         <input type="file" id="batchFileInput" accept=".pdf,.docx" multiple>
-        <div class="hint">Click to choose files, or drag many CVs here</div>
+        <div class="hint">Click to choose files, or drag many CVs here (max 5 per batch)</div>
         <div class="filename" id="batchFileNames"></div>
       </label>
       <button class="submit" id="batchSubmitBtn" disabled>Upload &amp; match batch</button>
@@ -336,7 +336,17 @@
     if (e.dataTransfer.files.length) handleBatchFiles(Array.from(e.dataTransfer.files));
   });
 
+  const MAX_BATCH_SIZE = 5;
+
   function handleBatchFiles(files) {
+    if (files.length > MAX_BATCH_SIZE) {
+      selectedBatchFiles = [];
+      batchFileNames.textContent = '';
+      batchSubmitBtn.disabled = true;
+      batchStatus.textContent = `Too many files: ${files.length} selected, max is ${MAX_BATCH_SIZE} per batch.`;
+      batchStatus.className = 'status error';
+      return;
+    }
     selectedBatchFiles = files;
     batchFileNames.textContent = files.length === 1 ? files[0].name : `${files.length} files selected`;
     batchSubmitBtn.disabled = false;
@@ -411,13 +421,13 @@
   async function fetchBatchResults(jobId, batchId) {
     batchStatus.textContent = 'Ranking candidates...';
     try {
-      const res = await fetch(`/jobs/${jobId}/match-batch/${batchId}?top_n=20`);
+      const res = await fetch(`/jobs/${jobId}/match-batch/${batchId}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Ranking failed (${res.status})`);
       }
       const results = await res.json();
-      batchStatus.textContent = `Done - showing top ${results.length} candidate(s).`;
+      batchStatus.textContent = `Done - ${results.length} candidate(s) matched.`;
       batchStatus.className = 'status';
       resultsEl.innerHTML = results.length
         ? results.map(r => resultCardHtml(r, r.candidate_name || r.filename, r.filename)).join('')

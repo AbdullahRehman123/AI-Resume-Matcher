@@ -28,6 +28,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="CV-Job Matcher", version="0.1.0")
 
+# Deliberate scale tradeoff: capped at 5 so match-batch can run the LLM
+# explanation on every candidate instead of shortlisting (see below). If
+# batch size ever needs to grow past a handful, bring shortlisting back
+# before the LLM step - running the LLM on hundreds/thousands of CVs
+# won't hold up.
+MAX_BATCH_SIZE = 5
+
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -148,6 +155,12 @@ async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depend
     """Upload many CVs at once. Text is parsed synchronously (fast, local),
     but LLM extraction is queued as a background task per candidate -
     this endpoint returns immediately, it doesn't wait for extraction."""
+    if len(files) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            400,
+            f"Batch too large: {len(files)} files submitted, max is {MAX_BATCH_SIZE} per batch.",
+        )
+
     batch_id = str(uuid.uuid4())
     queued, skipped = 0, 0
 
@@ -201,11 +214,17 @@ async def get_batch_status(batch_id: str, db: Session = Depends(get_db)):
 
 @app.get("/jobs/{job_id}/match-batch/{batch_id}", response_model=List[CandidateMatchResult])
 async def match_batch_to_job(
-    job_id: int, batch_id: str, top_n: int = 20, db: Session = Depends(get_db)
+    job_id: int, batch_id: str, db: Session = Depends(get_db)
 ):
     """Rank every extracted candidate in a batch against a job using cheap
-    local embeddings, then only run the expensive LLM explanation on the
-    top_n shortlist - not the whole batch."""
+    local embeddings, then run the LLM explanation on every candidate - no
+    shortlisting. Deliberate scale tradeoff: batch size is capped at
+    MAX_BATCH_SIZE (5), so there's no meaningful cost savings from
+    shortlisting, and silently dropping low-ranked candidates loses
+    information a recruiter might want. The embedding score is still used
+    for sort order. If batch size ever grows past a handful, shortlisting
+    should come back before the LLM step - this won't hold up at real
+    scale (hundreds/thousands of CVs)."""
     job_orm = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
     if not job_orm:
         raise HTTPException(404, "Job not found")
@@ -244,11 +263,10 @@ async def match_batch_to_job(
         key=lambda triple: triple[2],
         reverse=True,
     )
-    shortlist = ranked[:top_n]
-    logger.info("Shortlisted %d of %d candidates for job '%s'", len(shortlist), len(ranked), job.title)
+    logger.info("Explaining all %d ranked candidates for job '%s'", len(ranked), job.title)
 
     results = []
-    for candidate_orm, cv_data, score in shortlist:
+    for candidate_orm, cv_data, score in ranked:
         details = explain_match(cv_data, job)
         matched, missing = compute_skill_overlap(cv_data.skills, job.required_skills)
         results.append(CandidateMatchResult(
