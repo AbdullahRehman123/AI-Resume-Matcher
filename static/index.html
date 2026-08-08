@@ -73,7 +73,7 @@
     margin-bottom: 6px;
     font-weight: 600;
   }
-  select {
+  select, input[type="email"], input[type="password"] {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border);
@@ -82,6 +82,27 @@
     margin-bottom: 18px;
     background: #fff;
     color: var(--text);
+    font-family: inherit;
+  }
+
+  .user-bar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
   }
   .drop-zone {
     display: block;
@@ -147,44 +168,176 @@
     <p>Upload a CV (PDF or DOCX) to see how it matches against open roles.</p>
   </header>
 
-  <div class="mode-toggle">
-    <button class="mode-btn active" id="singleModeBtn" data-mode="single">Single CV</button>
-    <button class="mode-btn" id="batchModeBtn" data-mode="batch">Batch CVs</button>
-  </div>
-
-  <!-- SINGLE CV MODE -->
-  <div class="panel active" id="singlePanel">
+  <!-- AUTH VIEW -->
+  <div id="authView">
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="loginTabBtn" data-authmode="login">Log in</button>
+      <button class="mode-btn" id="signupTabBtn" data-authmode="signup">Sign up</button>
+    </div>
     <div class="upload-card">
-      <label class="drop-zone" id="dropZone">
-        <input type="file" id="fileInput" accept=".pdf,.docx">
-        <div class="hint">Click to choose a file, or drag one here</div>
-        <div class="filename" id="fileName"></div>
-      </label>
-      <button class="submit" id="submitBtn" disabled>Match against jobs</button>
-      <div class="status" id="status"></div>
+      <form id="authForm">
+        <label class="field-label" for="authEmail">Email</label>
+        <input type="email" id="authEmail" required autocomplete="email">
+        <label class="field-label" for="authPassword">Password</label>
+        <input type="password" id="authPassword" required autocomplete="current-password" minlength="8">
+        <button class="submit" id="authSubmitBtn" type="submit">Log in</button>
+        <div class="status" id="authStatus"></div>
+      </form>
     </div>
   </div>
 
-  <!-- BATCH CV MODE -->
-  <div class="panel" id="batchPanel">
-    <div class="upload-card">
-      <label class="field-label" for="jobSelect">Match against job</label>
-      <select id="jobSelect"><option value="">Loading jobs...</option></select>
-
-      <label class="drop-zone" id="batchDropZone">
-        <input type="file" id="batchFileInput" accept=".pdf,.docx" multiple>
-        <div class="hint">Click to choose files, or drag many CVs here (max 5 per batch)</div>
-        <div class="filename" id="batchFileNames"></div>
-      </label>
-      <button class="submit" id="batchSubmitBtn" disabled>Upload &amp; match batch</button>
-      <div class="status" id="batchStatus"></div>
+  <!-- APP VIEW (shown once logged in) -->
+  <div id="appView" style="display:none">
+    <div class="user-bar">
+      <span id="userEmailLabel"></span>
+      <button class="link-btn" id="logoutBtn">Log out</button>
     </div>
-  </div>
 
-  <div id="results"></div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="singleModeBtn" data-mode="single">Single CV</button>
+      <button class="mode-btn" id="batchModeBtn" data-mode="batch">Batch CVs</button>
+    </div>
+
+    <!-- SINGLE CV MODE -->
+    <div class="panel active" id="singlePanel">
+      <div class="upload-card">
+        <label class="drop-zone" id="dropZone">
+          <input type="file" id="fileInput" accept=".pdf,.docx">
+          <div class="hint">Click to choose a file, or drag one here</div>
+          <div class="filename" id="fileName"></div>
+        </label>
+        <button class="submit" id="submitBtn" disabled>Match against jobs</button>
+        <div class="status" id="status"></div>
+      </div>
+    </div>
+
+    <!-- BATCH CV MODE -->
+    <div class="panel" id="batchPanel">
+      <div class="upload-card">
+        <label class="field-label" for="jobSelect">Match against job</label>
+        <select id="jobSelect"><option value="">Loading jobs...</option></select>
+
+        <label class="drop-zone" id="batchDropZone">
+          <input type="file" id="batchFileInput" accept=".pdf,.docx" multiple>
+          <div class="hint">Click to choose files, or drag many CVs here (max 5 per batch)</div>
+          <div class="filename" id="batchFileNames"></div>
+        </label>
+        <button class="submit" id="batchSubmitBtn" disabled>Upload &amp; match batch</button>
+        <div class="status" id="batchStatus"></div>
+      </div>
+    </div>
+
+    <div id="results"></div>
+  </div>
 </div>
 
 <script>
+  // ---------- Session / auth ----------
+  const TOKEN_KEY = 'cvMatcherToken';
+  const EMAIL_KEY = 'cvMatcherEmail';
+
+  class SessionExpiredError extends Error {}
+
+  function getToken() { return localStorage.getItem(TOKEN_KEY); }
+  function setSession(token, email) {
+    localStorage.setItem(TOKEN_KEY, token);
+    if (email) localStorage.setItem(EMAIL_KEY, email);
+  }
+  function clearSession() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(EMAIL_KEY);
+  }
+
+  // Wraps fetch() with the Authorization header and centralizes 401
+  // handling - any protected endpoint returning 401 (missing/expired
+  // token) bounces the user back to the login screen instead of
+  // surfacing a confusing error in the middle of the matching UI.
+  async function authFetch(url, options = {}) {
+    const headers = { ...(options.headers || {}), Authorization: `Bearer ${getToken()}` };
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+      clearSession();
+      showAuthView();
+      throw new SessionExpiredError('Session expired - please log in again.');
+    }
+    return res;
+  }
+
+  const authView = document.getElementById('authView');
+  const appView = document.getElementById('appView');
+  const userEmailLabel = document.getElementById('userEmailLabel');
+
+  function showAuthView() {
+    authView.style.display = '';
+    appView.style.display = 'none';
+    stopPolling();
+  }
+  function showAppView() {
+    authView.style.display = 'none';
+    appView.style.display = '';
+    userEmailLabel.textContent = localStorage.getItem(EMAIL_KEY) || '';
+  }
+
+  // ---------- Auth form ----------
+  const loginTabBtn = document.getElementById('loginTabBtn');
+  const signupTabBtn = document.getElementById('signupTabBtn');
+  const authForm = document.getElementById('authForm');
+  const authEmailInput = document.getElementById('authEmail');
+  const authPasswordInput = document.getElementById('authPassword');
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+  const authStatus = document.getElementById('authStatus');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  let authMode = 'login';
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    const isLogin = mode === 'login';
+    loginTabBtn.classList.toggle('active', isLogin);
+    signupTabBtn.classList.toggle('active', !isLogin);
+    authSubmitBtn.textContent = isLogin ? 'Log in' : 'Create account';
+    authStatus.textContent = '';
+    authStatus.className = 'status';
+  }
+  loginTabBtn.addEventListener('click', () => setAuthMode('login'));
+  signupTabBtn.addEventListener('click', () => setAuthMode('signup'));
+
+  authForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const email = authEmailInput.value.trim();
+    const password = authPasswordInput.value;
+
+    authSubmitBtn.disabled = true;
+    authStatus.textContent = '';
+    authStatus.className = 'status';
+
+    try {
+      const res = await fetch(`/auth/${authMode === 'login' ? 'login' : 'signup'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Request failed (${res.status})`);
+      }
+      const { access_token } = await res.json();
+      setSession(access_token, email);
+      authForm.reset();
+      showAppView();
+    } catch (err) {
+      authStatus.textContent = err.message || 'Something went wrong.';
+      authStatus.className = 'status error';
+    } finally {
+      authSubmitBtn.disabled = false;
+    }
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    clearSession();
+    showAuthView();
+  });
+
   // ---------- Mode toggle ----------
   const singleModeBtn = document.getElementById('singleModeBtn');
   const batchModeBtn = document.getElementById('batchModeBtn');
@@ -280,7 +433,7 @@
     formData.append('file', selectedFile);
 
     try {
-      const res = await fetch('/match', { method: 'POST', body: formData });
+      const res = await authFetch('/match', { method: 'POST', body: formData });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Request failed (${res.status})`);
@@ -292,8 +445,10 @@
         resultsEl.innerHTML = results.map(r => resultCardHtml(r, r.job_title, null)).join('');
       }
     } catch (err) {
-      statusEl.textContent = err.message || 'Something went wrong.';
-      statusEl.className = 'status error';
+      if (!(err instanceof SessionExpiredError)) {
+        statusEl.textContent = err.message || 'Something went wrong.';
+        statusEl.className = 'status error';
+      }
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Match against jobs';
@@ -313,15 +468,17 @@
 
   async function loadJobs() {
     try {
-      const res = await fetch('/jobs');
+      const res = await authFetch('/jobs');
       const jobs = await res.json();
       if (!jobs.length) {
         jobSelect.innerHTML = '<option value="">No jobs yet - add one via POST /jobs</option>';
         return;
       }
       jobSelect.innerHTML = jobs.map(j => `<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('');
-    } catch {
-      jobSelect.innerHTML = '<option value="">Could not load jobs</option>';
+    } catch (err) {
+      if (!(err instanceof SessionExpiredError)) {
+        jobSelect.innerHTML = '<option value="">Could not load jobs</option>';
+      }
     }
   }
 
@@ -377,7 +534,7 @@
     selectedBatchFiles.forEach(f => formData.append('files', f));
 
     try {
-      const res = await fetch('/candidates/batch', { method: 'POST', body: formData });
+      const res = await authFetch('/candidates/batch', { method: 'POST', body: formData });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Upload failed (${res.status})`);
@@ -386,8 +543,10 @@
       batchStatus.textContent = `Queued ${queued} CV(s)${skipped ? `, skipped ${skipped}` : ''}. Extracting...`;
       pollBatchStatus(batch_id, jobId);
     } catch (err) {
-      batchStatus.textContent = err.message || 'Something went wrong.';
-      batchStatus.className = 'status error';
+      if (!(err instanceof SessionExpiredError)) {
+        batchStatus.textContent = err.message || 'Something went wrong.';
+        batchStatus.className = 'status error';
+      }
       batchSubmitBtn.disabled = false;
     }
   });
@@ -396,7 +555,7 @@
     stopPolling();
     pollTimer = setInterval(async () => {
       try {
-        const res = await fetch(`/candidates/batch/${batchId}`);
+        const res = await authFetch(`/candidates/batch/${batchId}`);
         if (!res.ok) throw new Error('Could not check batch status');
         const { total, status_counts } = await res.json();
         const pending = status_counts.pending || 0;
@@ -411,8 +570,10 @@
         }
       } catch (err) {
         stopPolling();
-        batchStatus.textContent = err.message || 'Something went wrong while polling.';
-        batchStatus.className = 'status error';
+        if (!(err instanceof SessionExpiredError)) {
+          batchStatus.textContent = err.message || 'Something went wrong while polling.';
+          batchStatus.className = 'status error';
+        }
         batchSubmitBtn.disabled = false;
       }
     }, 2000);
@@ -421,7 +582,7 @@
   async function fetchBatchResults(jobId, batchId) {
     batchStatus.textContent = 'Ranking candidates...';
     try {
-      const res = await fetch(`/jobs/${jobId}/match-batch/${batchId}`);
+      const res = await authFetch(`/jobs/${jobId}/match-batch/${batchId}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Ranking failed (${res.status})`);
@@ -433,11 +594,20 @@
         ? results.map(r => resultCardHtml(r, r.candidate_name || r.filename, r.filename)).join('')
         : '<p class="status">No extracted candidates matched.</p>';
     } catch (err) {
-      batchStatus.textContent = err.message || 'Something went wrong.';
-      batchStatus.className = 'status error';
+      if (!(err instanceof SessionExpiredError)) {
+        batchStatus.textContent = err.message || 'Something went wrong.';
+        batchStatus.className = 'status error';
+      }
     } finally {
       batchSubmitBtn.disabled = false;
     }
+  }
+
+  // ---------- Init ----------
+  if (getToken()) {
+    showAppView();
+  } else {
+    showAuthView();
   }
 </script>
 </body>

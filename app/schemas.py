@@ -90,7 +90,30 @@ class BatchStatusResponse(BaseModel):
  
 class CandidateMatchResult(MatchResult):
     """A MatchResult with the candidate identity attached, for batch results."""
- 
+
     candidate_id: int
     candidate_name: Optional[str] = None
     filename: str
+
+
+class UserCreate(BaseModel):
+    """Request body for signup/login - same shape for both."""
+
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    """Response shape for a user - never includes hashed_password."""
+
+    model_config = {"from_attributes": True}
+
+    id: int
+    email: str
+
+
+class Token(BaseModel):
+    """Response shape for signup/login - the client stores access_token."""
+
+    access_token: str
+    token_type: str = "bearer"

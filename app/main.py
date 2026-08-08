@@ -13,14 +13,16 @@ from sqlalchemy.orm import Session
 
 from app.logging_config import setup_logging
 from app.database import get_db, init_db
-from app.orm_models import JobPosting as JobPostingORM, Candidate
+from app.orm_models import JobPosting as JobPostingORM, Candidate, User
 from app.parser import extract_text
 from app.extractor import extract_structured_data
 from app.matcher import match_cv_to_job, rank_candidates_by_similarity, explain_match, compute_skill_overlap
 from app.tasks import extract_candidate_task
+from app.auth import hash_password, verify_password, create_access_token, get_current_user
 from app.schemas import (
     JobRequirements, JobCreate, JobUpdate, JobOut, MatchResult,
     CVData, BatchUploadResponse, BatchStatusResponse, CandidateMatchResult,
+    UserCreate, Token,
 )
 
 setup_logging()
@@ -57,8 +59,35 @@ async def on_startup():
     init_db()
 
 
+@app.post("/auth/signup", response_model=Token, status_code=201)
+async def signup(body: UserCreate, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == body.email).first()
+    if existing:
+        raise HTTPException(400, "An account with this email already exists.")
+
+    user = User(email=body.email, hashed_password=hash_password(body.password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    logger.info("Signed up new user id=%d", user.id)
+
+    token = create_access_token(data={"sub": str(user.id)})
+    return Token(access_token=token)
+
+
+@app.post("/auth/login", response_model=Token)
+async def login(body: UserCreate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == body.email).first()
+    if not user or not verify_password(body.password, user.hashed_password):
+        raise HTTPException(401, "Incorrect email or password.")
+
+    logger.info("User id=%d logged in", user.id)
+    token = create_access_token(data={"sub": str(user.id)})
+    return Token(access_token=token)
+
+
 @app.post("/jobs", response_model=JobOut, status_code=201)
-async def create_job(job: JobCreate, db: Session = Depends(get_db)):
+async def create_job(job: JobCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db_job = JobPostingORM(**job.model_dump())
     db.add(db_job)
     db.commit()
@@ -68,12 +97,12 @@ async def create_job(job: JobCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/jobs", response_model=List[JobOut])
-async def list_jobs(db: Session = Depends(get_db)):
+async def list_jobs(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(JobPostingORM).all()
 
 
 @app.get("/jobs/{job_id}", response_model=JobOut)
-async def get_job(job_id: int, db: Session = Depends(get_db)):
+async def get_job(job_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     job = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
     if not job:
         raise HTTPException(404, "Job not found")
@@ -81,7 +110,7 @@ async def get_job(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/jobs/{job_id}", response_model=JobOut)
-async def update_job(job_id: int, job_update: JobUpdate, db: Session = Depends(get_db)):
+async def update_job(job_id: int, job_update: JobUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     job = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
     if not job:
         raise HTTPException(404, "Job not found")
@@ -94,7 +123,7 @@ async def update_job(job_id: int, job_update: JobUpdate, db: Session = Depends(g
 
 
 @app.delete("/jobs/{job_id}", status_code=204)
-async def delete_job(job_id: int, db: Session = Depends(get_db)):
+async def delete_job(job_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     job = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
     if not job:
         raise HTTPException(404, "Job not found")
@@ -105,7 +134,7 @@ async def delete_job(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/match", response_model=List[MatchResult])
-async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     logger.info("Received CV upload: %s", file.filename)
     suffix = Path(file.filename).suffix.lower()
     if suffix not in (".pdf", ".docx"):
@@ -151,7 +180,7 @@ async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
 
 @app.post("/candidates/batch", response_model=BatchUploadResponse)
-async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
+async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Upload many CVs at once. Text is parsed synchronously (fast, local),
     but LLM extraction is queued as a background task per candidate -
     this endpoint returns immediately, it doesn't wait for extraction."""
@@ -199,7 +228,7 @@ async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depend
 
 
 @app.get("/candidates/batch/{batch_id}", response_model=BatchStatusResponse)
-async def get_batch_status(batch_id: str, db: Session = Depends(get_db)):
+async def get_batch_status(batch_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Poll this while extraction runs in the background."""
     candidates = db.query(Candidate).filter(Candidate.batch_id == batch_id).all()
     if not candidates:
@@ -214,7 +243,7 @@ async def get_batch_status(batch_id: str, db: Session = Depends(get_db)):
 
 @app.get("/jobs/{job_id}/match-batch/{batch_id}", response_model=List[CandidateMatchResult])
 async def match_batch_to_job(
-    job_id: int, batch_id: str, db: Session = Depends(get_db)
+    job_id: int, batch_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Rank every extracted candidate in a batch against a job using cheap
     local embeddings, then run the LLM explanation on every candidate - no
