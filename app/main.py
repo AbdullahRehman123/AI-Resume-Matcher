@@ -88,7 +88,7 @@ async def login(body: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/jobs", response_model=JobOut, status_code=201)
 async def create_job(job: JobCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db_job = JobPostingORM(**job.model_dump())
+    db_job = JobPostingORM(**job.model_dump(), owner_id=current_user.id)
     db.add(db_job)
     db.commit()
     db.refresh(db_job)
@@ -98,12 +98,14 @@ async def create_job(job: JobCreate, db: Session = Depends(get_db), current_user
 
 @app.get("/jobs", response_model=List[JobOut])
 async def list_jobs(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(JobPostingORM).all()
+    return db.query(JobPostingORM).filter(JobPostingORM.owner_id == current_user.id).all()
 
 
 @app.get("/jobs/{job_id}", response_model=JobOut)
 async def get_job(job_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    job = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
+    job = db.query(JobPostingORM).filter(
+        JobPostingORM.id == job_id, JobPostingORM.owner_id == current_user.id
+    ).first()
     if not job:
         raise HTTPException(404, "Job not found")
     return job
@@ -111,7 +113,9 @@ async def get_job(job_id: int, db: Session = Depends(get_db), current_user: User
 
 @app.put("/jobs/{job_id}", response_model=JobOut)
 async def update_job(job_id: int, job_update: JobUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    job = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
+    job = db.query(JobPostingORM).filter(
+        JobPostingORM.id == job_id, JobPostingORM.owner_id == current_user.id
+    ).first()
     if not job:
         raise HTTPException(404, "Job not found")
     for field, value in job_update.model_dump(exclude_unset=True).items():
@@ -124,7 +128,9 @@ async def update_job(job_id: int, job_update: JobUpdate, db: Session = Depends(g
 
 @app.delete("/jobs/{job_id}", status_code=204)
 async def delete_job(job_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    job = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
+    job = db.query(JobPostingORM).filter(
+        JobPostingORM.id == job_id, JobPostingORM.owner_id == current_user.id
+    ).first()
     if not job:
         raise HTTPException(404, "Job not found")
     db.delete(job)
@@ -159,7 +165,7 @@ async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db), 
         logger.warning("Rejected non-resume upload %s: %s", file.filename, cv_data.rejection_reason)
         raise HTTPException(422, cv_data.rejection_reason or "This doesn't look like a CV/resume.")
 
-    jobs_orm = db.query(JobPostingORM).all()
+    jobs_orm = db.query(JobPostingORM).filter(JobPostingORM.owner_id == current_user.id).all()
     if not jobs_orm:
         raise HTTPException(400, "No jobs in the database yet - add one via POST /jobs first.")
 
@@ -214,7 +220,8 @@ async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depend
             Path(tmp_path).unlink(missing_ok=True)
 
         candidate = Candidate(
-            batch_id=batch_id, filename=file.filename, raw_text=raw_text, status="pending"
+            batch_id=batch_id, filename=file.filename, raw_text=raw_text, status="pending",
+            owner_id=current_user.id,
         )
         db.add(candidate)
         db.commit()
@@ -230,7 +237,9 @@ async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depend
 @app.get("/candidates/batch/{batch_id}", response_model=BatchStatusResponse)
 async def get_batch_status(batch_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Poll this while extraction runs in the background."""
-    candidates = db.query(Candidate).filter(Candidate.batch_id == batch_id).all()
+    candidates = db.query(Candidate).filter(
+        Candidate.batch_id == batch_id, Candidate.owner_id == current_user.id
+    ).all()
     if not candidates:
         raise HTTPException(404, "Batch not found")
 
@@ -254,7 +263,9 @@ async def match_batch_to_job(
     for sort order. If batch size ever grows past a handful, shortlisting
     should come back before the LLM step - this won't hold up at real
     scale (hundreds/thousands of CVs)."""
-    job_orm = db.query(JobPostingORM).filter(JobPostingORM.id == job_id).first()
+    job_orm = db.query(JobPostingORM).filter(
+        JobPostingORM.id == job_id, JobPostingORM.owner_id == current_user.id
+    ).first()
     if not job_orm:
         raise HTTPException(404, "Job not found")
 
@@ -265,11 +276,17 @@ async def match_batch_to_job(
         min_years_experience=job_orm.min_years_experience,
     )
 
-    candidates_orm = (
-        db.query(Candidate)
-        .filter(Candidate.batch_id == batch_id, Candidate.status == "extracted")
-        .all()
-    )
+    # Ownership check on the whole batch (any status) first, separate from the
+    # "extracted" filter below - so a batch that isn't the caller's own gets a
+    # 404 ("Batch not found"), while a batch that IS theirs but still mid-
+    # extraction gets the more specific 400 "not ready yet" message.
+    batch_candidates = db.query(Candidate).filter(
+        Candidate.batch_id == batch_id, Candidate.owner_id == current_user.id
+    ).all()
+    if not batch_candidates:
+        raise HTTPException(404, "Batch not found")
+
+    candidates_orm = [c for c in batch_candidates if c.status == "extracted"]
     if not candidates_orm:
         raise HTTPException(400, "No extracted candidates in this batch yet - check /candidates/batch/{batch_id} for status.")
 

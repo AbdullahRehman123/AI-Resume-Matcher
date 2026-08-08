@@ -2,6 +2,11 @@
 
 Called once per candidate at upload time. Retries on transient failures
 (e.g. a flaky Inference API response) instead of silently failing.
+
+No owner_id check needed here: this task only mutates a specific
+candidate_id that was already created (with owner_id set) by the
+authenticated /candidates/batch upload that queued it - it doesn't take
+requests from a caller that could ask for someone else's candidate.
 """
 
 import logging

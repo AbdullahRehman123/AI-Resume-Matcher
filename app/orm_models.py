@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models - kept separate from the Pydantic schemas in
 schemas.py, which describe API request/response shapes, not DB tables."""
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, ARRAY
+from sqlalchemy import Column, Integer, String, Float, DateTime, ARRAY, ForeignKey
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -20,6 +20,7 @@ class JobPosting(Base):
     __tablename__ = "job_postings"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(String, nullable=False)
     required_skills = Column(ARRAY(String), default=list)
@@ -35,6 +36,7 @@ class Candidate(Base):
     __tablename__ = "candidates"
  
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     batch_id = Column(String, index=True, nullable=False)
     filename = Column(String, nullable=False)
     raw_text = Column(String, nullable=False)

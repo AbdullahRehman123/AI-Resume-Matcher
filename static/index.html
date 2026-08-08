@@ -73,7 +73,7 @@
     margin-bottom: 6px;
     font-weight: 600;
   }
-  select, input[type="email"], input[type="password"] {
+  select, input[type="email"], input[type="password"], input[type="text"], input[type="number"], textarea {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border);
@@ -84,6 +84,22 @@
     color: var(--text);
     font-family: inherit;
   }
+  textarea { min-height: 80px; resize: vertical; }
+
+  .job-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+  }
+  .job-row-title { font-size: 0.92rem; font-weight: 600; }
+  .link-btn.danger { color: var(--danger); }
+  #jobsList { margin-top: 20px; }
 
   .user-bar {
     display: flex;
@@ -196,6 +212,7 @@
     <div class="mode-toggle">
       <button class="mode-btn active" id="singleModeBtn" data-mode="single">Single CV</button>
       <button class="mode-btn" id="batchModeBtn" data-mode="batch">Batch CVs</button>
+      <button class="mode-btn" id="jobsModeBtn" data-mode="jobs">My Jobs</button>
     </div>
 
     <!-- SINGLE CV MODE -->
@@ -225,6 +242,30 @@
         <button class="submit" id="batchSubmitBtn" disabled>Upload &amp; match batch</button>
         <div class="status" id="batchStatus"></div>
       </div>
+    </div>
+
+    <!-- MY JOBS -->
+    <div class="panel" id="jobsPanel">
+      <div class="upload-card">
+        <form id="jobForm">
+          <label class="field-label" for="jobTitleInput">Title</label>
+          <input type="text" id="jobTitleInput" required>
+
+          <label class="field-label" for="jobDescriptionInput">Description</label>
+          <textarea id="jobDescriptionInput" required></textarea>
+
+          <label class="field-label" for="jobSkillsInput">Required skills (comma-separated)</label>
+          <input type="text" id="jobSkillsInput" placeholder="e.g. Python, SQL, FastAPI">
+
+          <label class="field-label" for="jobMinYearsInput">Minimum years experience</label>
+          <input type="number" id="jobMinYearsInput" min="0" step="0.5" placeholder="Optional">
+
+          <button class="submit" id="jobFormSubmitBtn" type="submit">Create job</button>
+          <div class="status" id="jobFormStatus"></div>
+        </form>
+      </div>
+
+      <div id="jobsList"></div>
     </div>
 
     <div id="results"></div>
@@ -257,6 +298,7 @@
     const res = await fetch(url, { ...options, headers });
     if (res.status === 401) {
       clearSession();
+      resetUserState();
       showAuthView();
       throw new SessionExpiredError('Session expired - please log in again.');
     }
@@ -324,7 +366,13 @@
       const { access_token } = await res.json();
       setSession(access_token, email);
       authForm.reset();
+      // Logging in as a possibly-different user - wipe whatever the
+      // previous session left in the UI (job dropdown, results, selected
+      // files, batch polling) rather than letting it linger until
+      // something happens to re-fetch it.
+      resetUserState();
       showAppView();
+      await loadJobs();
     } catch (err) {
       authStatus.textContent = err.message || 'Something went wrong.';
       authStatus.className = 'status error';
@@ -335,28 +383,36 @@
 
   logoutBtn.addEventListener('click', () => {
     clearSession();
+    resetUserState();
     showAuthView();
   });
 
   // ---------- Mode toggle ----------
   const singleModeBtn = document.getElementById('singleModeBtn');
   const batchModeBtn = document.getElementById('batchModeBtn');
+  const jobsModeBtn = document.getElementById('jobsModeBtn');
   const singlePanel = document.getElementById('singlePanel');
   const batchPanel = document.getElementById('batchPanel');
+  const jobsPanel = document.getElementById('jobsPanel');
   const resultsEl = document.getElementById('results');
 
   function setMode(mode) {
     const isSingle = mode === 'single';
+    const isBatch = mode === 'batch';
+    const isJobs = mode === 'jobs';
     singleModeBtn.classList.toggle('active', isSingle);
-    batchModeBtn.classList.toggle('active', !isSingle);
+    batchModeBtn.classList.toggle('active', isBatch);
+    jobsModeBtn.classList.toggle('active', isJobs);
     singlePanel.classList.toggle('active', isSingle);
-    batchPanel.classList.toggle('active', !isSingle);
+    batchPanel.classList.toggle('active', isBatch);
+    jobsPanel.classList.toggle('active', isJobs);
     resultsEl.innerHTML = '';
     stopPolling();
-    if (!isSingle) loadJobs();
+    if (isBatch || isJobs) loadJobs();
   }
   singleModeBtn.addEventListener('click', () => setMode('single'));
   batchModeBtn.addEventListener('click', () => setMode('batch'));
+  jobsModeBtn.addEventListener('click', () => setMode('jobs'));
 
   // ---------- Shared result rendering ----------
   function escapeHtml(str) {
@@ -466,20 +522,29 @@
   let selectedBatchFiles = [];
   let pollTimer = null;
 
+  // Single fetch feeding both the batch-mode job dropdown and the My Jobs
+  // list below - they show the same underlying data, so refreshing them
+  // from separate fetches risked them drifting out of sync.
   async function loadJobs() {
     try {
       const res = await authFetch('/jobs');
       const jobs = await res.json();
-      if (!jobs.length) {
-        jobSelect.innerHTML = '<option value="">No jobs yet - add one via POST /jobs</option>';
-        return;
-      }
-      jobSelect.innerHTML = jobs.map(j => `<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('');
+      renderJobSelect(jobs);
+      renderJobsList(jobs);
     } catch (err) {
       if (!(err instanceof SessionExpiredError)) {
         jobSelect.innerHTML = '<option value="">Could not load jobs</option>';
+        jobsListEl.innerHTML = '<p class="status error">Could not load jobs.</p>';
       }
     }
+  }
+
+  function renderJobSelect(jobs) {
+    if (!jobs.length) {
+      jobSelect.innerHTML = '<option value="">No jobs yet - add one via POST /jobs</option>';
+      return;
+    }
+    jobSelect.innerHTML = jobs.map(j => `<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('');
   }
 
   batchFileInput.addEventListener('change', () => {
@@ -601,6 +666,117 @@
     } finally {
       batchSubmitBtn.disabled = false;
     }
+  }
+
+  // ---------- MY JOBS ----------
+  const jobForm = document.getElementById('jobForm');
+  const jobTitleInput = document.getElementById('jobTitleInput');
+  const jobDescriptionInput = document.getElementById('jobDescriptionInput');
+  const jobSkillsInput = document.getElementById('jobSkillsInput');
+  const jobMinYearsInput = document.getElementById('jobMinYearsInput');
+  const jobFormSubmitBtn = document.getElementById('jobFormSubmitBtn');
+  const jobFormStatus = document.getElementById('jobFormStatus');
+  const jobsListEl = document.getElementById('jobsList');
+
+  function renderJobsList(jobs) {
+    if (!jobs.length) {
+      jobsListEl.innerHTML = '<p class="status">No jobs yet - create one above.</p>';
+      return;
+    }
+    jobsListEl.innerHTML = jobs.map(j => `
+      <div class="job-row">
+        <span class="job-row-title">${escapeHtml(j.title)}</span>
+        <button class="link-btn danger" data-delete-job="${j.id}">Delete</button>
+      </div>
+    `).join('');
+  }
+
+  jobForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const title = jobTitleInput.value.trim();
+    const description = jobDescriptionInput.value.trim();
+    const required_skills = jobSkillsInput.value.split(',').map(s => s.trim()).filter(Boolean);
+    const minYearsRaw = jobMinYearsInput.value;
+    const min_years_experience = minYearsRaw === '' ? null : Number(minYearsRaw);
+
+    jobFormSubmitBtn.disabled = true;
+    jobFormStatus.textContent = '';
+    jobFormStatus.className = 'status';
+
+    try {
+      const res = await authFetch('/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description, required_skills, min_years_experience }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Request failed (${res.status})`);
+      }
+      jobForm.reset();
+      jobFormStatus.textContent = 'Job created.';
+      await loadJobs();
+    } catch (err) {
+      if (!(err instanceof SessionExpiredError)) {
+        jobFormStatus.textContent = err.message || 'Something went wrong.';
+        jobFormStatus.className = 'status error';
+      }
+    } finally {
+      jobFormSubmitBtn.disabled = false;
+    }
+  });
+
+  jobsListEl.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-delete-job]');
+    if (!btn) return;
+    const jobId = btn.dataset.deleteJob;
+
+    btn.disabled = true;
+    jobFormStatus.textContent = '';
+    jobFormStatus.className = 'status';
+
+    try {
+      const res = await authFetch(`/jobs/${jobId}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Delete failed (${res.status})`);
+      }
+      await loadJobs();
+    } catch (err) {
+      if (!(err instanceof SessionExpiredError)) {
+        jobFormStatus.textContent = err.message || 'Something went wrong.';
+        jobFormStatus.className = 'status error';
+        btn.disabled = false;
+      }
+    }
+  });
+
+  // ---------- User-state reset (login/logout/session-expiry) ----------
+  // Login/logout changes WHO the data belongs to, not just whether a token
+  // exists - without this, switching accounts in the same tab leaves the
+  // previous user's job dropdown, results, and batch status on screen
+  // until something happens to trigger a re-fetch (e.g. re-clicking a tab).
+  function resetUserState() {
+    stopPolling();
+    resultsEl.innerHTML = '';
+
+    selectedFile = null;
+    fileName.textContent = '';
+    submitBtn.disabled = true;
+    statusEl.textContent = '';
+    statusEl.className = 'status';
+
+    selectedBatchFiles = [];
+    batchFileNames.textContent = '';
+    batchSubmitBtn.disabled = true;
+    batchStatus.textContent = '';
+    batchStatus.className = 'status';
+    jobSelect.innerHTML = '<option value="">Loading jobs...</option>';
+
+    jobForm.reset();
+    jobFormStatus.textContent = '';
+    jobFormStatus.className = 'status';
+    jobsListEl.innerHTML = '<p class="status">Loading jobs...</p>';
   }
 
   // ---------- Init ----------
