@@ -87,3 +87,17 @@ def get_current_user(
         raise unauthorized
 
     return user
+
+
+def get_verified_user(current_user: User = Depends(get_current_user)) -> User:
+    """Same as get_current_user, plus an is_verified check - use this on
+    endpoints that cost LLM money (/match, /candidates/batch) rather than
+    on every route. Job CRUD etc. stay on plain get_current_user."""
+    if not current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before uploading CVs. Check the "
+            "verification link shown at signup (or your inbox, once email "
+            "sending is wired up).",
+        )
+    return current_user

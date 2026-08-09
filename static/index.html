@@ -110,6 +110,17 @@
     font-size: 0.85rem;
     color: var(--muted);
   }
+  .notice {
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    word-break: break-word;
+  }
+  .notice a { color: var(--accent); }
   .link-btn {
     background: none;
     border: none;
@@ -208,6 +219,8 @@
       <span id="userEmailLabel"></span>
       <button class="link-btn" id="logoutBtn">Log out</button>
     </div>
+
+    <div class="notice" id="verifyBanner" style="display:none"></div>
 
     <div class="mode-toggle">
       <button class="mode-btn active" id="singleModeBtn" data-mode="single">Single CV</button>
@@ -308,6 +321,7 @@
   const authView = document.getElementById('authView');
   const appView = document.getElementById('appView');
   const userEmailLabel = document.getElementById('userEmailLabel');
+  const verifyBanner = document.getElementById('verifyBanner');
 
   function showAuthView() {
     authView.style.display = '';
@@ -363,7 +377,7 @@
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Request failed (${res.status})`);
       }
-      const { access_token } = await res.json();
+      const { access_token, verification_link } = await res.json();
       setSession(access_token, email);
       authForm.reset();
       // Logging in as a possibly-different user - wipe whatever the
@@ -372,6 +386,13 @@
       // something happens to re-fetch it.
       resetUserState();
       showAppView();
+      if (verification_link) {
+        // Dev-mode stand-in for actually emailing this - remove once real
+        // email sending is wired up on the backend.
+        verifyBanner.innerHTML = `Email sending isn't wired up yet — click this link to verify your account: ` +
+          `<a href="${escapeHtml(verification_link)}" target="_blank" rel="noopener">${escapeHtml(verification_link)}</a>`;
+        verifyBanner.style.display = '';
+      }
       await loadJobs();
     } catch (err) {
       authStatus.textContent = err.message || 'Something went wrong.';
@@ -759,6 +780,8 @@
   function resetUserState() {
     stopPolling();
     resultsEl.innerHTML = '';
+    verifyBanner.style.display = 'none';
+    verifyBanner.innerHTML = '';
 
     selectedFile = null;
     fileName.textContent = '';

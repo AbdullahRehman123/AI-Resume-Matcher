@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models - kept separate from the Pydantic schemas in
 schemas.py, which describe API request/response shapes, not DB tables."""
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, ARRAY, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ARRAY, ForeignKey
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -13,6 +13,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    is_verified = Column(Boolean, nullable=False, default=False, server_default="false")
+    verification_token = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

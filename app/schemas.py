@@ -112,8 +112,18 @@ class UserOut(BaseModel):
     email: str
 
 
+class VerifyResponse(BaseModel):
+    """Response shape for GET /auth/verify."""
+
+    message: str
+
+
 class Token(BaseModel):
     """Response shape for signup/login - the client stores access_token."""
 
     access_token: str
     token_type: str = "bearer"
+    # Only set by /auth/signup, and only until a real email provider (e.g.
+    # SendGrid or Postmark) is wired up - this is a dev-mode stand-in for
+    # actually emailing the verification link.
+    verification_link: Optional[str] = None

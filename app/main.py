@@ -1,6 +1,7 @@
 """FastAPI app: upload a CV, match it against one or more jobs."""
 
 import logging
+import secrets
 import tempfile
 import uuid
 from pathlib import Path
@@ -18,11 +19,15 @@ from app.parser import extract_text
 from app.extractor import extract_structured_data
 from app.matcher import match_cv_to_job, rank_candidates_by_similarity, explain_match, compute_skill_overlap
 from app.tasks import extract_candidate_task
-from app.auth import hash_password, verify_password, create_access_token, get_current_user
+from app.auth import hash_password, verify_password, create_access_token, get_current_user, get_verified_user
+from app.usage_limits import (
+    check_and_increment_usage, UsageLimitExceeded,
+    check_and_increment_signup_rate, SignupRateLimitExceeded,
+)
 from app.schemas import (
     JobRequirements, JobCreate, JobUpdate, JobOut, MatchResult,
     CVData, BatchUploadResponse, BatchStatusResponse, CandidateMatchResult,
-    UserCreate, Token,
+    UserCreate, Token, VerifyResponse,
 )
 
 setup_logging()
@@ -60,19 +65,50 @@ async def on_startup():
 
 
 @app.post("/auth/signup", response_model=Token, status_code=201)
-async def signup(body: UserCreate, db: Session = Depends(get_db)):
+async def signup(body: UserCreate, request: Request, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    try:
+        check_and_increment_signup_rate(client_ip)
+    except SignupRateLimitExceeded as e:
+        raise HTTPException(429, str(e))
+
     existing = db.query(User).filter(User.email == body.email).first()
     if existing:
         raise HTTPException(400, "An account with this email already exists.")
 
-    user = User(email=body.email, hashed_password=hash_password(body.password))
+    verification_token = secrets.token_urlsafe(32)
+    user = User(
+        email=body.email,
+        hashed_password=hash_password(body.password),
+        verification_token=verification_token,
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
     logger.info("Signed up new user id=%d", user.id)
 
+    # Placeholder until a real email provider (e.g. SendGrid or Postmark) is
+    # wired up: log the link and hand it back in the response body so the
+    # frontend can show it directly, instead of actually emailing it.
+    verification_link = f"{request.base_url}auth/verify?token={verification_token}"
+    logger.info("Verification link for user id=%d (%s): %s", user.id, user.email, verification_link)
+
     token = create_access_token(data={"sub": str(user.id)})
-    return Token(access_token=token)
+    return Token(access_token=token, verification_link=verification_link)
+
+
+@app.get("/auth/verify", response_model=VerifyResponse)
+async def verify_email(token: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.verification_token == token).first()
+    if not user:
+        raise HTTPException(400, "Invalid or already-used verification link.")
+
+    user.is_verified = True
+    user.verification_token = None
+    db.commit()
+    logger.info("User id=%d verified their email", user.id)
+
+    return VerifyResponse(message="Email verified - you can now upload and match CVs.")
 
 
 @app.post("/auth/login", response_model=Token)
@@ -140,7 +176,7 @@ async def delete_job(job_id: int, db: Session = Depends(get_db), current_user: U
 
 
 @app.post("/match", response_model=List[MatchResult])
-async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_verified_user)):
     logger.info("Received CV upload: %s", file.filename)
     suffix = Path(file.filename).suffix.lower()
     if suffix not in (".pdf", ".docx"):
@@ -158,6 +194,14 @@ async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db), 
         raise HTTPException(422, str(e))
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+
+    # Gate right before the LLM extraction call (not before text parsing,
+    # which is local/free) - the whole point is to stop the LLM call from
+    # happening at all once a cap is hit.
+    try:
+        check_and_increment_usage(current_user.id, count=1)
+    except UsageLimitExceeded as e:
+        raise HTTPException(429, str(e))
 
     cv_data = extract_structured_data(raw_text)
 
@@ -186,7 +230,7 @@ async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db), 
 
 
 @app.post("/candidates/batch", response_model=BatchUploadResponse)
-async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_verified_user)):
     """Upload many CVs at once. Text is parsed synchronously (fast, local),
     but LLM extraction is queued as a background task per candidate -
     this endpoint returns immediately, it doesn't wait for extraction."""
@@ -195,6 +239,17 @@ async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depend
             400,
             f"Batch too large: {len(files)} files submitted, max is {MAX_BATCH_SIZE} per batch.",
         )
+
+    # Gate the whole batch up front, once, on the files that will actually
+    # be attempted (by extension) - not per-file mid-loop. This stops any
+    # extraction tasks from being queued at all once a cap is hit. A file
+    # that later fails text extraction still counts against usage here
+    # since the check runs before parsing - a deliberate simplification.
+    valid_files = [f for f in files if Path(f.filename).suffix.lower() in (".pdf", ".docx")]
+    try:
+        check_and_increment_usage(current_user.id, count=len(valid_files))
+    except UsageLimitExceeded as e:
+        raise HTTPException(429, str(e))
 
     batch_id = str(uuid.uuid4())
     queued, skipped = 0, 0
