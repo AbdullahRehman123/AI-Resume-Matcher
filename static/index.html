@@ -3,223 +3,683 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CV-Job Matcher</title>
+<meta name="color-scheme" content="light">
+<title>HireLens</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='5' fill='none' stroke='%23C7873C' stroke-width='2'/%3E%3Cline x1='12' y1='6' x2='12' y2='2' stroke='%23C7873C' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='17.2' y1='9' x2='20.66' y2='7' stroke='%23C7873C' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='17.2' y1='15' x2='20.66' y2='17' stroke='%23C7873C' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='12' y1='18' x2='12' y2='22' stroke='%23C7873C' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='6.8' y1='15' x2='3.34' y2='17' stroke='%23C7873C' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='6.8' y1='9' x2='3.34' y2='7' stroke='%23C7873C' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+  /* ---------- Design tokens ----------
+     One idea drives every choice here: a lens finding the sharp signal
+     against blurred noise. --aperture (amber) is reserved for primary
+     actions and the aperture graphic; --focus (teal) for positive/matched
+     signals; --signal (brick) for negative/missing signals only; --blur
+     for anything neutral/muted; --ink for text and dark chrome. Tint
+     colors are derived from these five via color-mix(), never hand-picked
+     new hex values, so the palette stays exactly the one specified. */
   :root {
-    --bg: #f7f7f8;
-    --card: #ffffff;
-    --border: #e2e2e6;
-    --text: #1a1a1e;
-    --muted: #6b6b73;
-    --accent: #2f5d50;
-    --accent-light: #e8f0ed;
-    --danger: #b3432f;
-    --danger-light: #fbeae6;
-    --radius: 10px;
+    --ink: #15171B;
+    --paper: #F6F4EF;
+    --surface: #FFFFFF;
+    --aperture: #C7873C;
+    --aperture-ink: color-mix(in srgb, var(--aperture) 58%, var(--ink) 42%);
+    --focus: #2D6A5F;
+    --blur: #8B8A85;
+    --signal: #B54B3A;
+
+    --radius-card: 10px;
+    --radius-control: 8px;
+    --shadow-card: 0 2px 12px rgba(21, 23, 27, 0.06);
+
+    --font-display: 'Newsreader', Georgia, serif;
+    --font-body: 'IBM Plex Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, monospace;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
   }
+
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap {
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 48px 20px 80px;
-  }
-  header { margin-bottom: 24px; }
-  h1 { font-size: 1.6rem; margin: 0 0 6px; letter-spacing: -0.01em; }
-  header p { margin: 0; color: var(--muted); font-size: 0.95rem; }
 
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: var(--space-7) var(--space-4) var(--space-7);
+  }
+
+  /* Horizontal-only alignment container for landing sections - sections
+     control their own vertical rhythm, so this doesn't stack padding the
+     way nesting .wrap inside every section would. */
+  .landing-container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 var(--space-4);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    color: var(--ink);
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.2rem;
+    letter-spacing: -0.01em;
+    margin: var(--space-6) 0 var(--space-3);
+    color: var(--ink);
+  }
+
+  /* ---------- Focus states (quality floor) ---------- */
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+  textarea:focus-visible, .drop-zone:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--aperture);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+
+  /* ---------- Reduced motion (quality floor) ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* ---------- View system (landing / login / signup / app) ----------
+     Same class-based switching already used for the single/batch/jobs
+     mode toggle below - one .active view at a time, no framework. */
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ---------- Navbar (persists across every view) ---------- */
+  .navbar {
+    background: var(--surface);
+    border-bottom: 1px solid color-mix(in srgb, var(--blur) 18%, transparent);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .navbar-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; cursor: pointer; background: none; border: none; padding: 0; }
+  .brand-mark { flex-shrink: 0; }
+  .brand-word {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.2rem;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .navbar-toggle {
+    display: none;
+    margin-left: auto;
+    align-items: center;
+    justify-content: center;
+    width: 38px; height: 38px;
+    background: none;
+    border: 1px solid color-mix(in srgb, var(--blur) 35%, transparent);
+    border-radius: var(--radius-control);
+    font-size: 1.1rem;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .navbar-collapsible { display: flex; align-items: center; gap: var(--space-5); flex: 1; justify-content: flex-end; }
+  .navbar-links { display: flex; gap: var(--space-5); }
+  .nav-link {
+    color: var(--blur);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-family: var(--font-body);
+  }
+  .nav-link:hover { color: var(--ink); }
+  .navbar-actions { display: none; align-items: center; gap: var(--space-3); }
+  .navbar-actions.active { display: flex; }
+  .nav-user-email { font-size: 0.85rem; color: var(--blur); }
+
+  @media (max-width: 720px) {
+    .navbar-toggle { display: flex; }
+    .navbar-inner { flex-wrap: wrap; }
+    .navbar-collapsible {
+      display: none;
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+      order: 3;
+      gap: var(--space-4);
+      margin-top: var(--space-3);
+      padding-top: var(--space-3);
+      border-top: 1px solid color-mix(in srgb, var(--blur) 18%, transparent);
+    }
+    .navbar.nav-open .navbar-collapsible { display: flex; }
+    .navbar-collapsible .navbar-links { flex-direction: column; gap: var(--space-3); }
+    .navbar-collapsible .navbar-actions.active { flex-direction: column; align-items: stretch; }
+  }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: var(--space-7) 0 var(--space-6); text-align: center; }
+  .hero-headline {
+    font-size: clamp(2.1rem, 6vw, 3.1rem);
+    letter-spacing: -0.02em;
+  }
+  .hero-sub {
+    font-size: 1.05rem;
+    color: var(--blur);
+    max-width: 540px;
+    margin: var(--space-4) auto 0;
+  }
+  .hero-ctas { display: flex; gap: var(--space-3); justify-content: center; margin-top: var(--space-5); flex-wrap: wrap; }
+  .hero-visual { display: flex; justify-content: center; margin-top: var(--space-7); }
+  .hero-visual svg { display: block; width: 200px; height: 200px; }
+  @media (max-width: 480px) {
+    .hero-visual svg { width: 150px; height: 150px; }
+  }
+
+  /* ---------- Credibility strip (quiet, secondary to the hero) ---------- */
+  .credibility-strip {
+    padding: var(--space-6) 0;
+    border-top: 1px solid color-mix(in srgb, var(--blur) 15%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--blur) 15%, transparent);
+  }
+  .credibility-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+  .credibility-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .credibility-desc { font-size: 0.86rem; color: var(--blur); margin: 0; }
+  @media (max-width: 600px) {
+    .credibility-grid { grid-template-columns: 1fr; gap: var(--space-4); }
+  }
+
+  /* ---------- How it works ---------- */
+  .how-it-works { padding: var(--space-7) 0; }
+  .how-it-works .section-title { text-align: center; margin: 0 0 var(--space-6); font-size: 1.6rem; }
+  .steps { display: flex; flex-direction: column; gap: var(--space-5); }
+  .step { display: flex; gap: var(--space-4); align-items: flex-start; }
+  .step-number {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--aperture-ink);
+    flex-shrink: 0;
+    width: 32px;
+  }
+  .step-body h3 { margin: 0 0 4px; font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; }
+  .step-body p { margin: 0; color: var(--blur); font-size: 0.92rem; }
+
+  /* ---------- Pricing placeholder ---------- */
+  .pricing-placeholder { padding: var(--space-6) 0; text-align: center; }
+  .pricing-placeholder p { color: var(--blur); font-size: 0.95rem; margin: 0; }
+
+  /* ---------- Footer ---------- */
+  .site-footer { padding: var(--space-6) 0 var(--space-7); border-top: 1px solid color-mix(in srgb, var(--blur) 15%, transparent); }
+  .footer-inner { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); text-align: center; }
+  .footer-brand { display: flex; align-items: center; gap: 6px; }
+  .footer-brand .brand-word { font-size: 1rem; }
+  .footer-tagline { color: var(--blur); font-size: 0.85rem; margin: 0; }
+  .footer-links { display: flex; gap: var(--space-4); }
+  .footer-links a { color: var(--blur); font-size: 0.82rem; text-decoration: none; }
+  .footer-links a:hover { color: var(--ink); text-decoration: underline; }
+  .footer-copyright { color: var(--blur); font-size: 0.78rem; margin-top: var(--space-2); }
+
+  /* ---------- Segmented controls (mode toggle, auth tabs) ---------- */
   .mode-toggle {
     display: flex;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid color-mix(in srgb, var(--blur) 22%, transparent);
+    box-shadow: var(--shadow-card);
+    border-radius: var(--radius-card);
     padding: 4px;
-    margin-bottom: 20px;
+    margin-bottom: var(--space-5);
     gap: 4px;
   }
   .mode-btn {
     flex: 1;
-    padding: 9px 12px;
+    padding: 9px 10px;
     border: none;
     background: transparent;
-    border-radius: 7px;
-    font-size: 0.9rem;
+    border-radius: var(--radius-control);
+    font-family: var(--font-body);
+    font-size: 0.88rem;
     font-weight: 600;
-    color: var(--muted);
+    color: var(--blur);
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
   }
-  .mode-btn.active { background: var(--accent); color: #fff; }
+  .mode-btn.active { background: var(--ink); color: var(--paper); }
+  .mode-btn:hover:not(.active) { color: var(--ink); }
 
   .panel { display: none; }
   .panel.active { display: block; }
 
-  .upload-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 28px;
+  /* ---------- Card system (used everywhere: forms, jobs, results) ---------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid color-mix(in srgb, var(--blur) 18%, transparent);
+    box-shadow: var(--shadow-card);
+    border-radius: var(--radius-card);
+    padding: var(--space-6);
   }
+
   label.field-label {
     display: block;
-    font-size: 0.82rem;
-    color: var(--muted);
+    font-size: 0.8rem;
+    color: var(--blur);
     margin-bottom: 6px;
     font-weight: 600;
   }
-  select, input[type="email"], input[type="password"], input[type="text"], input[type="number"], textarea {
+  select, input[type="email"], input[type="password"], input[type="text"],
+  input[type="number"], textarea {
     width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    font-size: 0.9rem;
-    margin-bottom: 18px;
-    background: #fff;
-    color: var(--text);
-    font-family: inherit;
+    padding: 11px 13px;
+    border: 1px solid color-mix(in srgb, var(--blur) 35%, transparent);
+    border-radius: var(--radius-card);
+    font-size: 1rem;
+    margin-bottom: var(--space-4);
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-body);
   }
-  textarea { min-height: 80px; resize: vertical; }
+  select:hover, input:hover, textarea:hover { border-color: color-mix(in srgb, var(--blur) 55%, transparent); }
+  textarea { min-height: 84px; resize: vertical; }
+  ::placeholder { color: var(--blur); opacity: 0.85; }
 
+  /* ---------- Buttons ---------- */
+  .btn {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.92rem;
+    border-radius: var(--radius-control);
+    padding: 12px 20px;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-block { width: 100%; margin-top: var(--space-2); }
+  .btn-primary { background: var(--aperture); color: var(--ink); border-color: var(--aperture); }
+  .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--aperture) 85%, var(--ink) 15%); }
+  .btn-secondary { background: transparent; color: var(--ink); border-color: var(--ink); }
+  .btn-secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .btn-danger-outline { background: transparent; color: var(--signal); border-color: var(--signal); }
+  .btn-danger-outline:hover:not(:disabled) { background: color-mix(in srgb, var(--signal) 8%, transparent); }
+  .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
+
+  /* ---------- Jobs list / rows ---------- */
+  #jobsList { margin-top: var(--space-2); }
   .job-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    margin-bottom: 8px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    background: var(--surface);
+    border: 1px solid color-mix(in srgb, var(--blur) 18%, transparent);
+    box-shadow: var(--shadow-card);
+    border-radius: var(--radius-card);
+    margin-bottom: var(--space-3);
   }
-  .job-row-title { font-size: 0.92rem; font-weight: 600; }
-  .link-btn.danger { color: var(--danger); }
-  #jobsList { margin-top: 20px; }
+  .job-row-main { min-width: 0; flex: 1; }
+  .job-row-title { font-size: 0.95rem; font-weight: 600; }
+  .job-row-meta { display: block; margin-top: 3px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--blur); }
+  .job-row .skills-row { margin-top: var(--space-2); margin-bottom: 0; }
 
-  .user-bar {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-    font-size: 0.85rem;
-    color: var(--muted);
-  }
+  /* ---------- Notice ---------- */
   .notice {
-    background: var(--accent-light);
-    color: var(--accent);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px 16px;
+    background: color-mix(in srgb, var(--focus) 10%, var(--surface));
+    color: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--focus) 30%, transparent);
+    border-radius: var(--radius-card);
+    padding: var(--space-4) var(--space-5);
     font-size: 0.85rem;
-    margin-bottom: 16px;
+    margin-bottom: var(--space-4);
     word-break: break-word;
   }
-  .notice a { color: var(--accent); }
+  .notice a { color: var(--focus); font-weight: 600; }
+
   .link-btn {
     background: none;
     border: none;
     padding: 0;
-    color: var(--accent);
+    color: var(--ink);
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
     text-decoration: underline;
+    text-underline-offset: 2px;
   }
+
+  /* ---------- Drop zones ---------- */
   .drop-zone {
     display: block;
-    border: 1.5px dashed var(--border);
-    border-radius: var(--radius);
-    padding: 32px 20px;
+    border: 1.5px dashed color-mix(in srgb, var(--blur) 45%, transparent);
+    border-radius: var(--radius-card);
+    padding: var(--space-6) var(--space-4);
     text-align: center;
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease;
   }
   .drop-zone:hover, .drop-zone.dragover {
-    border-color: var(--accent);
-    background: var(--accent-light);
+    border-color: var(--aperture);
+    background: color-mix(in srgb, var(--aperture) 7%, var(--surface));
   }
   .drop-zone input { display: none; }
-  .drop-zone .filename { margin-top: 10px; font-size: 0.9rem; color: var(--accent); font-weight: 600; }
-  .drop-zone .hint { color: var(--muted); font-size: 0.85rem; }
-
-  button.submit {
-    margin-top: 18px;
-    width: 100%;
-    padding: 12px 16px;
-    border: none;
-    border-radius: var(--radius);
-    background: var(--accent);
-    color: #fff;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.15s ease;
+  .drop-icon {
+    display: block;
+    width: 38px; height: 38px;
+    margin: 0 auto var(--space-3);
+    border-radius: 50%;
+    border: 1.5px solid var(--blur);
+    position: relative;
+    transition: border-color 0.15s ease;
   }
-  button.submit:disabled { opacity: 0.5; cursor: not-allowed; }
-  button.submit:hover:not(:disabled) { opacity: 0.9; }
+  .drop-icon::after {
+    content: '';
+    position: absolute;
+    inset: 9px;
+    border-radius: 50%;
+    border: 1.5px solid var(--blur);
+    transition: border-color 0.15s ease;
+  }
+  .drop-zone:hover .drop-icon, .drop-zone.dragover .drop-icon,
+  .drop-zone:hover .drop-icon::after, .drop-zone.dragover .drop-icon::after {
+    border-color: var(--aperture);
+  }
+  .drop-zone .hint { color: var(--blur); font-size: 0.88rem; }
+  .drop-zone .filename {
+    margin-top: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--aperture-ink);
+    font-weight: 500;
+    word-break: break-all;
+  }
 
-  .status { margin-top: 14px; font-size: 0.9rem; color: var(--muted); }
-  .status.error { color: var(--danger); }
+  /* ---------- Status text ---------- */
+  .status { margin-top: var(--space-3); font-size: 0.88rem; color: var(--blur); }
+  .status.error { color: var(--signal); }
 
-  #results { margin-top: 28px; display: flex; flex-direction: column; gap: 16px; }
-  .result-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
-  .result-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
-  .result-header h3 { margin: 0; font-size: 1.05rem; }
-  .result-header .sub { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
-  .score { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+  /* ---------- Results ---------- */
+  #results { margin-top: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid color-mix(in srgb, var(--blur) 18%, transparent);
+    box-shadow: var(--shadow-card);
+    border-radius: var(--radius-card);
+    padding: var(--space-5) var(--space-6);
+    filter: blur(0);
+    opacity: 1;
+    transition: filter 0.5s ease, opacity 0.5s ease;
+  }
+  .result-card.entering { filter: blur(4px); opacity: 0.35; }
+  .result-card:nth-child(1) { transition-delay: 0ms; }
+  .result-card:nth-child(2) { transition-delay: 70ms; }
+  .result-card:nth-child(3) { transition-delay: 140ms; }
+  .result-card:nth-child(4) { transition-delay: 210ms; }
+  .result-card:nth-child(5) { transition-delay: 280ms; }
+
+  .result-top { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-4); }
+  .aperture-figure { flex-shrink: 0; width: 72px; height: 72px; }
+  .aperture-figure svg { display: block; }
+  .aperture-number { font-family: var(--font-mono); font-weight: 600; fill: var(--ink); }
+  .result-meta { min-width: 0; flex: 1; }
+  .result-meta h3 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; letter-spacing: -0.005em; }
+  .result-meta .sub { font-family: var(--font-mono); font-size: 0.78rem; color: var(--blur); margin-top: 2px; word-break: break-all; }
+
   .verdict {
-    display: inline-block; padding: 3px 10px; border-radius: 999px;
-    font-size: 0.78rem; font-weight: 600; text-transform: capitalize; margin-bottom: 12px;
+    display: inline-block;
+    margin-top: var(--space-2);
+    padding: 3px 10px;
+    border-radius: var(--radius-control);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
-  .verdict.strong { background: var(--accent-light); color: var(--accent); }
-  .verdict.partial { background: #fdf3e2; color: #92620b; }
-  .verdict.weak { background: var(--danger-light); color: var(--danger); }
-  .explanation { font-size: 0.92rem; color: var(--text); margin-bottom: 14px; }
-  .skills-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .skills-row .label { width: 100%; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
-  .chip { font-size: 0.8rem; padding: 3px 9px; border-radius: 6px; }
-  .chip.matched { background: var(--accent-light); color: var(--accent); }
-  .chip.missing { background: var(--danger-light); color: var(--danger); }
+  .verdict.strong { background: color-mix(in srgb, var(--focus) 14%, var(--surface)); color: var(--focus); }
+  .verdict.partial { background: color-mix(in srgb, var(--aperture) 16%, var(--surface)); color: var(--aperture-ink); }
+  .verdict.weak { background: color-mix(in srgb, var(--signal) 14%, var(--surface)); color: var(--signal); }
+
+  .explanation { font-size: 0.94rem; color: var(--ink); margin: 0 0 var(--space-4); }
+
+  .skills-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-3); }
+  .skills-row .label {
+    width: 100%;
+    font-size: 0.72rem;
+    color: var(--blur);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 3px 10px;
+    border-radius: var(--radius-control);
+  }
+  .chip.matched { background: color-mix(in srgb, var(--focus) 12%, var(--surface)); color: var(--focus); }
+  .chip.missing { background: color-mix(in srgb, var(--signal) 12%, var(--surface)); color: var(--signal); }
+  .chip.neutral { background: color-mix(in srgb, var(--blur) 14%, var(--surface)); color: var(--blur); }
+
+  /* ---------- Skeleton / focus-pull loading state ---------- */
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .skeleton-block {
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--blur) 14%, var(--surface)) 25%,
+      color-mix(in srgb, var(--blur) 26%, var(--surface)) 37%,
+      color-mix(in srgb, var(--blur) 14%, var(--surface)) 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+    border-radius: 6px;
+    height: 12px;
+  }
+  .skeleton-aperture { width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0; }
+  .result-card.skeleton { pointer-events: none; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 480px) {
+    .wrap { padding: var(--space-6) var(--space-3) var(--space-7); }
+    .card { padding: var(--space-5); }
+    .mode-btn { font-size: 0.78rem; padding: 8px 6px; }
+    .result-card { padding: var(--space-4); }
+    .result-top { gap: var(--space-3); }
+    .job-row { padding: var(--space-3) var(--space-4); }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>CV-Job Matcher</h1>
-    <p>Upload a CV (PDF or DOCX) to see how it matches against open roles.</p>
-  </header>
 
-  <!-- AUTH VIEW -->
-  <div id="authView">
+<!-- NAVBAR (persists across every view) -->
+<nav class="navbar" id="navbar">
+  <div class="navbar-inner">
+    <a href="#hero" class="brand" id="navBrandLink" aria-label="HireLens home">
+      <svg class="brand-mark" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="5" stroke="var(--aperture)" stroke-width="1.6"/>
+        <line x1="12" y1="6" x2="12" y2="2" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="17.2" y1="9" x2="20.66" y2="7" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="17.2" y1="15" x2="20.66" y2="17" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="12" y1="18" x2="12" y2="22" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="6.8" y1="15" x2="3.34" y2="17" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="6.8" y1="9" x2="3.34" y2="7" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-word">HireLens</span>
+    </a>
+
+    <button class="navbar-toggle" id="navbarToggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false">&#9776;</button>
+
+    <div class="navbar-collapsible" id="navbarCollapsible">
+      <div class="navbar-links">
+        <a href="#hero" class="nav-link" data-scroll-target="hero">Product</a>
+        <a href="#howItWorks" class="nav-link" data-scroll-target="howItWorks">How it works</a>
+        <a href="#pricingSection" class="nav-link" data-scroll-target="pricingSection">Pricing</a>
+      </div>
+      <div class="navbar-actions" id="navActionsLoggedOut">
+        <button class="btn btn-secondary btn-sm" id="navLoginBtn" type="button">Log in</button>
+        <button class="btn btn-primary btn-sm" id="navGetStartedBtn" type="button">Get started</button>
+      </div>
+      <div class="navbar-actions" id="navActionsLoggedIn">
+        <span id="userEmailLabel" class="nav-user-email"></span>
+        <button class="btn btn-secondary btn-sm" id="logoutBtn" type="button">Log out</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- LANDING VIEW -->
+<div class="view active" id="landingView">
+  <section class="hero" id="hero">
+    <div class="landing-container">
+      <h1 class="hero-headline">See past the keywords.</h1>
+      <p class="hero-sub">HireLens reads every resume and scores it against your actual job requirements — skills, experience, and context an LLM understands, not keyword density. Every score comes with a plain-language reason.</p>
+      <div class="hero-ctas">
+        <button class="btn btn-primary" id="heroGetStartedBtn" type="button">Get started free</button>
+        <button class="btn btn-secondary" id="heroHowItWorksBtn" type="button">See how it works</button>
+      </div>
+      <div class="hero-visual" id="heroAperture" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <section class="credibility-strip">
+    <div class="landing-container">
+      <div class="credibility-grid">
+        <div class="credibility-item">
+          <div class="credibility-label">No keyword games</div>
+          <p class="credibility-desc">Real reasoning, not string matching.</p>
+        </div>
+        <div class="credibility-item">
+          <div class="credibility-label">Explainable scores</div>
+          <p class="credibility-desc">Every match comes with why, not just a number.</p>
+        </div>
+        <div class="credibility-item">
+          <div class="credibility-label">Open, inspectable pipeline</div>
+          <p class="credibility-desc">Built on Hugging Face's open models.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="how-it-works" id="howItWorks">
+    <div class="landing-container">
+      <h2 class="section-title">How it works</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="step-number">01</span>
+          <div class="step-body">
+            <h3>Upload</h3>
+            <p>Drop up to 5 CVs — PDF or DOCX.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="step-number">02</span>
+          <div class="step-body">
+            <h3>Match</h3>
+            <p>HireLens extracts each candidate's background and scores it against your job.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="step-number">03</span>
+          <div class="step-body">
+            <h3>Review</h3>
+            <p>Ranked results with matched and missing skills, and a plain-language verdict for each.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pricing-placeholder" id="pricingSection">
+    <div class="landing-container">
+      <p>Free while HireLens is in beta.</p>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="landing-container footer-inner">
+      <div class="footer-brand">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="5" stroke="var(--aperture)" stroke-width="1.6"/>
+          <line x1="12" y1="6" x2="12" y2="2" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+          <line x1="17.2" y1="9" x2="20.66" y2="7" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+          <line x1="17.2" y1="15" x2="20.66" y2="17" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+          <line x1="12" y1="18" x2="12" y2="22" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+          <line x1="6.8" y1="15" x2="3.34" y2="17" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+          <line x1="6.8" y1="9" x2="3.34" y2="7" stroke="var(--aperture)" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-word">HireLens</span>
+      </div>
+      <p class="footer-tagline">The right candidate, in focus.</p>
+      <div class="footer-links">
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+        <a href="#">Contact</a>
+      </div>
+      <p class="footer-copyright">&copy; 2026 HireLens.</p>
+    </div>
+  </footer>
+</div>
+
+<!-- LOGIN / SIGNUP VIEW -->
+<div class="view" id="authView">
+  <div class="wrap">
     <div class="mode-toggle">
       <button class="mode-btn active" id="loginTabBtn" data-authmode="login">Log in</button>
       <button class="mode-btn" id="signupTabBtn" data-authmode="signup">Sign up</button>
     </div>
-    <div class="upload-card">
+    <div class="card">
       <form id="authForm">
         <label class="field-label" for="authEmail">Email</label>
-        <input type="email" id="authEmail" required autocomplete="email">
+        <input type="email" id="authEmail" required autocomplete="email" placeholder="you@company.com">
         <label class="field-label" for="authPassword">Password</label>
-        <input type="password" id="authPassword" required autocomplete="current-password" minlength="8">
-        <button class="submit" id="authSubmitBtn" type="submit">Log in</button>
+        <input type="password" id="authPassword" required autocomplete="current-password" minlength="8" placeholder="At least 8 characters">
+        <button class="btn btn-primary btn-block" id="authSubmitBtn" type="submit">Log in</button>
         <div class="status" id="authStatus"></div>
       </form>
     </div>
   </div>
+</div>
 
-  <!-- APP VIEW (shown once logged in) -->
-  <div id="appView" style="display:none">
-    <div class="user-bar">
-      <span id="userEmailLabel"></span>
-      <button class="link-btn" id="logoutBtn">Log out</button>
-    </div>
-
+<!-- APP VIEW (shown once logged in) -->
+<div class="view" id="appView">
+  <div class="wrap">
     <div class="notice" id="verifyBanner" style="display:none"></div>
 
     <div class="mode-toggle">
@@ -230,42 +690,44 @@
 
     <!-- SINGLE CV MODE -->
     <div class="panel active" id="singlePanel">
-      <div class="upload-card">
-        <label class="drop-zone" id="dropZone">
+      <div class="card">
+        <label class="drop-zone" id="dropZone" tabindex="0">
           <input type="file" id="fileInput" accept=".pdf,.docx">
+          <span class="drop-icon" aria-hidden="true"></span>
           <div class="hint">Click to choose a file, or drag one here</div>
           <div class="filename" id="fileName"></div>
         </label>
-        <button class="submit" id="submitBtn" disabled>Match against jobs</button>
+        <button class="btn btn-primary btn-block" id="submitBtn" disabled>Match against jobs</button>
         <div class="status" id="status"></div>
       </div>
     </div>
 
     <!-- BATCH CV MODE -->
     <div class="panel" id="batchPanel">
-      <div class="upload-card">
+      <div class="card">
         <label class="field-label" for="jobSelect">Match against job</label>
         <select id="jobSelect"><option value="">Loading jobs...</option></select>
 
-        <label class="drop-zone" id="batchDropZone">
+        <label class="drop-zone" id="batchDropZone" tabindex="0">
           <input type="file" id="batchFileInput" accept=".pdf,.docx" multiple>
+          <span class="drop-icon" aria-hidden="true"></span>
           <div class="hint">Click to choose files, or drag many CVs here (max 5 per batch)</div>
           <div class="filename" id="batchFileNames"></div>
         </label>
-        <button class="submit" id="batchSubmitBtn" disabled>Upload &amp; match batch</button>
+        <button class="btn btn-primary btn-block" id="batchSubmitBtn" disabled>Upload &amp; match batch</button>
         <div class="status" id="batchStatus"></div>
       </div>
     </div>
 
     <!-- MY JOBS -->
     <div class="panel" id="jobsPanel">
-      <div class="upload-card">
+      <div class="card">
         <form id="jobForm">
           <label class="field-label" for="jobTitleInput">Title</label>
-          <input type="text" id="jobTitleInput" required>
+          <input type="text" id="jobTitleInput" required placeholder="e.g. Senior Backend Engineer">
 
           <label class="field-label" for="jobDescriptionInput">Description</label>
-          <textarea id="jobDescriptionInput" required></textarea>
+          <textarea id="jobDescriptionInput" required placeholder="Paste the job description or write a short summary..."></textarea>
 
           <label class="field-label" for="jobSkillsInput">Required skills (comma-separated)</label>
           <input type="text" id="jobSkillsInput" placeholder="e.g. Python, SQL, FastAPI">
@@ -273,11 +735,12 @@
           <label class="field-label" for="jobMinYearsInput">Minimum years experience</label>
           <input type="number" id="jobMinYearsInput" min="0" step="0.5" placeholder="Optional">
 
-          <button class="submit" id="jobFormSubmitBtn" type="submit">Create job</button>
+          <button class="btn btn-primary btn-block" id="jobFormSubmitBtn" type="submit">Create job</button>
           <div class="status" id="jobFormStatus"></div>
         </form>
       </div>
 
+      <h2 class="section-title">Your jobs</h2>
       <div id="jobsList"></div>
     </div>
 
@@ -312,26 +775,100 @@
     if (res.status === 401) {
       clearSession();
       resetUserState();
-      showAuthView();
+      showView('login');
       throw new SessionExpiredError('Session expired - please log in again.');
     }
     return res;
   }
 
+  // ---------- View system ----------
+  // Same pattern as the mode toggle below: one .active view at a time,
+  // CSS class-based, no framework. login/signup share one underlying
+  // view (the existing auth card + its own login/signup tab toggle) -
+  // showView() just also sets which tab is active when routing there.
+  const landingView = document.getElementById('landingView');
   const authView = document.getElementById('authView');
   const appView = document.getElementById('appView');
   const userEmailLabel = document.getElementById('userEmailLabel');
   const verifyBanner = document.getElementById('verifyBanner');
 
-  function showAuthView() {
-    authView.style.display = '';
-    appView.style.display = 'none';
-    stopPolling();
+  const VIEW_ELS = { landing: landingView, login: authView, signup: authView, app: appView };
+  const navbarEl = document.getElementById('navbar');
+  const navActionsLoggedOut = document.getElementById('navActionsLoggedOut');
+  const navActionsLoggedIn = document.getElementById('navActionsLoggedIn');
+  const heroApertureEl = document.getElementById('heroAperture');
+
+  function syncNavAuth() {
+    const loggedIn = !!getToken();
+    navActionsLoggedOut.classList.toggle('active', !loggedIn);
+    navActionsLoggedIn.classList.toggle('active', loggedIn);
+    if (loggedIn) userEmailLabel.textContent = localStorage.getItem(EMAIL_KEY) || '';
   }
-  function showAppView() {
-    authView.style.display = 'none';
-    appView.style.display = '';
-    userEmailLabel.textContent = localStorage.getItem(EMAIL_KEY) || '';
+
+  function showView(name) {
+    [landingView, authView, appView].forEach(v => v.classList.remove('active'));
+    VIEW_ELS[name].classList.add('active');
+
+    if (name === 'login' || name === 'signup') setAuthMode(name);
+    if (name !== 'app') stopPolling();
+    if (name === 'landing') animateApertureOpen(heroApertureEl, 0.95, 200);
+
+    syncNavAuth();
+    navbarEl.classList.remove('nav-open');
+    navbarToggle.setAttribute('aria-expanded', 'false');
+    window.scrollTo(0, 0);
+  }
+
+  function scrollToSection(id) {
+    showView('landing');
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  // ---------- Navbar wiring ----------
+  const navbarToggle = document.getElementById('navbarToggle');
+  navbarToggle.addEventListener('click', () => {
+    const isOpen = navbarEl.classList.toggle('nav-open');
+    navbarToggle.setAttribute('aria-expanded', String(isOpen));
+  });
+
+  document.getElementById('navBrandLink').addEventListener('click', e => {
+    e.preventDefault();
+    scrollToSection('hero');
+  });
+  document.querySelectorAll('.nav-link[data-scroll-target]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      scrollToSection(a.dataset.scrollTarget);
+    });
+  });
+
+  document.getElementById('navLoginBtn').addEventListener('click', () => showView('login'));
+  document.getElementById('navGetStartedBtn').addEventListener('click', () => showView('signup'));
+  document.getElementById('heroGetStartedBtn').addEventListener('click', () => showView('signup'));
+  document.getElementById('heroHowItWorksBtn').addEventListener('click', () => scrollToSection('howItWorks'));
+
+  // ---------- Hero aperture animation ----------
+  // Reuses the exact same apertureSvg() function as every match score in
+  // the app (see "Aperture score graphic" below) rather than a bespoke
+  // hero illustration - starts closed and opens over ~1.2s, or renders
+  // already-open with no animation if the user prefers reduced motion.
+  function animateApertureOpen(el, targetScore, size, duration = 1200) {
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced) {
+      el.innerHTML = apertureSvg(targetScore, size);
+      return;
+    }
+    const start = performance.now();
+    function frame(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.innerHTML = apertureSvg(eased * targetScore, size);
+      if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
   }
 
   // ---------- Auth form ----------
@@ -385,7 +922,7 @@
       // files, batch polling) rather than letting it linger until
       // something happens to re-fetch it.
       resetUserState();
-      showAppView();
+      showView('app');
       if (email_sent) {
         verifyBanner.textContent = 'Check your email to verify your account.';
         verifyBanner.style.display = '';
@@ -408,7 +945,7 @@
   logoutBtn.addEventListener('click', () => {
     clearSession();
     resetUserState();
-    showAuthView();
+    showView('landing');
   });
 
   // ---------- Mode toggle ----------
@@ -454,22 +991,107 @@
     const chips = skills.map(s => `<span class="chip ${kind}">${escapeHtml(s)}</span>`).join('');
     return `<div class="skills-row"><div class="label">${label}</div>${chips}</div>`;
   }
+
+  // ---------- Aperture score graphic ----------
+  // The signature visual: a ring of camera-iris "blades" that open wider
+  // the higher the score, rather than a plain percentage bar. Blade count
+  // and geometry are intentionally fixed ratios of `size` so every score
+  // graphic in the app - result cards at 72px, the hero at 200px - reads
+  // as the same instrument, not a bespoke chart per context.
+  function apertureBandColor(pct) {
+    if (pct >= 70) return 'var(--focus)';
+    if (pct >= 40) return 'var(--aperture)';
+    return 'var(--blur)';
+  }
+
+  function apertureSvg(score, size = 72) {
+    const clamped = Math.max(0, Math.min(1, score || 0));
+    const pct = Math.round(clamped * 100);
+    const color = apertureBandColor(pct);
+    const cx = size / 2, cy = size / 2;
+    const outerR = size * (31 / 72);
+    const bladeCount = 7;
+    const openness = Math.max(0.08, Math.min(0.92, clamped));
+    const innerR = outerR * (0.16 + openness * 0.5);
+    const skew = (1 - openness) * 42;
+    const halfWidth = 25;
+    const fontSize = Math.round(size * 0.25);
+
+    const toXY = (angleDeg, r) => {
+      const rad = (angleDeg - 90) * Math.PI / 180;
+      return [(cx + r * Math.cos(rad)).toFixed(2), (cy + r * Math.sin(rad)).toFixed(2)];
+    };
+
+    let blades = '';
+    for (let i = 0; i < bladeCount; i++) {
+      const centerAngle = (360 / bladeCount) * i;
+      const [ox1, oy1] = toXY(centerAngle - halfWidth, outerR);
+      const [ox2, oy2] = toXY(centerAngle + halfWidth, outerR);
+      const [ix2, iy2] = toXY(centerAngle + halfWidth + skew, innerR);
+      const [ix1, iy1] = toXY(centerAngle - halfWidth + skew, innerR);
+      blades += `<polygon points="${ox1},${oy1} ${ox2},${oy2} ${ix2},${iy2} ${ix1},${iy1}" fill="${color}" fill-opacity="0.85"/>`;
+    }
+
+    return `
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Match score ${pct} percent">
+        <circle cx="${cx}" cy="${cy}" r="${outerR + 2}" fill="none" stroke="var(--blur)" stroke-opacity="0.3" stroke-width="1"/>
+        ${blades}
+        <circle cx="${cx}" cy="${cy}" r="${(innerR * 0.68).toFixed(2)}" fill="var(--surface)"/>
+        <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" class="aperture-number" style="font-size:${fontSize}px">${pct}</text>
+      </svg>
+    `;
+  }
+
   function resultCardHtml(r, title, subtitle) {
     return `
       <div class="result-card">
-        <div class="result-header">
-          <div>
+        <div class="result-top">
+          <div class="aperture-figure">${apertureSvg(r.similarity_score)}</div>
+          <div class="result-meta">
             <h3>${escapeHtml(title)}</h3>
             ${subtitle ? `<div class="sub">${escapeHtml(subtitle)}</div>` : ''}
+            <span class="verdict ${verdictClass(r.verdict)}">${escapeHtml(r.verdict)}</span>
           </div>
-          <span class="score">similarity ${(r.similarity_score * 100).toFixed(0)}%</span>
         </div>
-        <span class="verdict ${verdictClass(r.verdict)}">${escapeHtml(r.verdict)}</span>
         <p class="explanation">${escapeHtml(r.explanation)}</p>
         ${skillsRow('Matched', r.matched_skills, 'matched')}
         ${skillsRow('Missing', r.missing_skills, 'missing')}
       </div>
     `;
+  }
+
+  // ---------- Loading states: skeleton cards + focus-pull reveal ----------
+  // Skeletons render immediately so the UI never shows nothing while a
+  // request is in flight; real cards start blurred/faded and sharpen into
+  // focus via CSS transition once they replace the placeholders.
+  function renderSkeletonResults(count) {
+    resultsEl.innerHTML = Array.from({ length: Math.max(count, 0) }).map(() => `
+      <div class="result-card skeleton">
+        <div class="result-top">
+          <div class="skeleton-block skeleton-aperture"></div>
+          <div class="result-meta">
+            <div class="skeleton-block" style="width:60%;"></div>
+            <div class="skeleton-block" style="width:35%; margin-top:8px; height:10px;"></div>
+          </div>
+        </div>
+        <div class="skeleton-block" style="width:100%; margin-top:18px;"></div>
+        <div class="skeleton-block" style="width:80%; margin-top:8px;"></div>
+      </div>
+    `).join('');
+  }
+
+  function revealResultCards(html) {
+    resultsEl.innerHTML = html;
+    const cards = resultsEl.querySelectorAll('.result-card');
+    cards.forEach(c => c.classList.add('entering'));
+    // Double rAF so the blurred state paints at least one frame before the
+    // transition to sharp starts - otherwise the browser can collapse both
+    // into a single frame and the transition never visibly runs.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        cards.forEach(c => c.classList.remove('entering'));
+      });
+    });
   }
 
   // ---------- SINGLE CV MODE ----------
@@ -507,7 +1129,7 @@
     submitBtn.textContent = 'Matching...';
     statusEl.textContent = '';
     statusEl.className = 'status';
-    resultsEl.innerHTML = '';
+    renderSkeletonResults(1);
 
     const formData = new FormData();
     formData.append('file', selectedFile);
@@ -521,13 +1143,15 @@
       const results = await res.json();
       if (!results.length) {
         statusEl.textContent = 'No jobs to match against yet.';
+        resultsEl.innerHTML = '';
       } else {
-        resultsEl.innerHTML = results.map(r => resultCardHtml(r, r.job_title, null)).join('');
+        revealResultCards(results.map(r => resultCardHtml(r, r.job_title, null)).join(''));
       }
     } catch (err) {
       if (!(err instanceof SessionExpiredError)) {
         statusEl.textContent = err.message || 'Something went wrong.';
         statusEl.className = 'status error';
+        resultsEl.innerHTML = '';
       }
     } finally {
       submitBtn.disabled = false;
@@ -545,6 +1169,18 @@
 
   let selectedBatchFiles = [];
   let pollTimer = null;
+
+  // Keyboard access for both drop zones - the file input inside is
+  // display:none (and so unreachable by Tab), so the visible label itself
+  // is the focusable, activatable control.
+  [dropZone, batchDropZone].forEach(zone => {
+    zone.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        zone.querySelector('input[type="file"]').click();
+      }
+    });
+  });
 
   // Single fetch feeding both the batch-mode job dropdown and the My Jobs
   // list below - they show the same underlying data, so refreshing them
@@ -630,6 +1266,7 @@
       }
       const { batch_id, queued, skipped } = await res.json();
       batchStatus.textContent = `Queued ${queued} CV(s)${skipped ? `, skipped ${skipped}` : ''}. Extracting...`;
+      renderSkeletonResults(queued);
       pollBatchStatus(batch_id, jobId);
     } catch (err) {
       if (!(err instanceof SessionExpiredError)) {
@@ -662,6 +1299,7 @@
         if (!(err instanceof SessionExpiredError)) {
           batchStatus.textContent = err.message || 'Something went wrong while polling.';
           batchStatus.className = 'status error';
+          resultsEl.innerHTML = '';
         }
         batchSubmitBtn.disabled = false;
       }
@@ -679,13 +1317,16 @@
       const results = await res.json();
       batchStatus.textContent = `Done - ${results.length} candidate(s) matched.`;
       batchStatus.className = 'status';
-      resultsEl.innerHTML = results.length
-        ? results.map(r => resultCardHtml(r, r.candidate_name || r.filename, r.filename)).join('')
-        : '<p class="status">No extracted candidates matched.</p>';
+      if (results.length) {
+        revealResultCards(results.map(r => resultCardHtml(r, r.candidate_name || r.filename, r.filename)).join(''));
+      } else {
+        resultsEl.innerHTML = '<p class="status">No extracted candidates matched.</p>';
+      }
     } catch (err) {
       if (!(err instanceof SessionExpiredError)) {
         batchStatus.textContent = err.message || 'Something went wrong.';
         batchStatus.className = 'status error';
+        resultsEl.innerHTML = '';
       }
     } finally {
       batchSubmitBtn.disabled = false;
@@ -709,8 +1350,14 @@
     }
     jobsListEl.innerHTML = jobs.map(j => `
       <div class="job-row">
-        <span class="job-row-title">${escapeHtml(j.title)}</span>
-        <button class="link-btn danger" data-delete-job="${j.id}">Delete</button>
+        <div class="job-row-main">
+          <span class="job-row-title">${escapeHtml(j.title)}</span>
+          ${j.min_years_experience != null ? `<span class="job-row-meta">${j.min_years_experience}+ yrs experience</span>` : ''}
+          ${j.required_skills && j.required_skills.length
+            ? `<div class="skills-row">${j.required_skills.map(s => `<span class="chip neutral">${escapeHtml(s)}</span>`).join('')}</div>`
+            : ''}
+        </div>
+        <button class="btn btn-sm btn-danger-outline" data-delete-job="${j.id}">Delete</button>
       </div>
     `).join('');
   }
@@ -807,9 +1454,9 @@
 
   // ---------- Init ----------
   if (getToken()) {
-    showAppView();
+    showView('app');
   } else {
-    showAuthView();
+    showView('landing');
   }
 </script>
 </body>
