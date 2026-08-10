@@ -1,7 +1,21 @@
 """Data models shared across the pipeline."""
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def stringify_entry(item):
+    """Coerce one list entry to a string. The extraction LLM is asked for
+    plain strings (skills/job_titles/education) but occasionally over-
+    structures an entry as an object instead - e.g. education as
+    {"degree": "BS CS", "institution": "XYZ University"} rather than
+    "BS CS, XYZ University" - even though the prompt says not to. Don't
+    rely on the model always complying with the requested shape."""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        return ", ".join(str(v) for v in item.values() if v not in (None, ""))
+    return str(item)
 
 
 class CVData(BaseModel):
@@ -18,6 +32,16 @@ class CVData(BaseModel):
     is_resume: bool = True
     rejection_reason: Optional[str] = None
     raw_text: str = ""
+
+    @field_validator("skills", "job_titles", "education", mode="before")
+    @classmethod
+    def _stringify_list_entries(cls, value):
+        """Runs before type validation - maps each entry through
+        stringify_entry so a dict-shaped entry gets coerced to a string
+        instead of raising a ValidationError."""
+        if not isinstance(value, list):
+            return value
+        return [stringify_entry(item) for item in value]
 
 
 class JobRequirements(BaseModel):

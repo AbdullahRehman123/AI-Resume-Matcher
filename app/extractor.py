@@ -42,7 +42,9 @@ Return ONLY valid JSON, no prose, no markdown fences, matching this schema:
   "skills": list of strings (technical and soft skills, deduplicated),
   "years_experience": number or null (total years of professional experience),
   "job_titles": list of strings (past job titles held),
-  "education": list of strings (degree + institution, one entry each),
+  "education": list of strings ONLY, e.g. "BS Computer Science, XYZ
+    University" - never return objects or dictionaries for this field,
+    one combined "degree, institution" string per entry,
   "summary": string or null (2-3 sentence summary of the candidate),
   "is_resume": boolean (false if this document is clearly not a CV/resume -
     e.g. it's an invoice, article, job posting, or unrelated document),
