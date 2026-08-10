@@ -96,6 +96,14 @@ class CandidateMatchResult(MatchResult):
     filename: str
 
 
+class RetryExtractionResponse(BaseModel):
+    """Response for POST /candidates/{candidate_id}/retry-extraction."""
+
+    candidate_id: int
+    status: str
+    message: str
+
+
 class UserCreate(BaseModel):
     """Request body for signup/login - same shape for both."""
 

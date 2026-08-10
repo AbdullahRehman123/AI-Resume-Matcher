@@ -29,7 +29,7 @@ from app.usage_limits import (
 from app.schemas import (
     JobRequirements, JobCreate, JobUpdate, JobOut, MatchResult,
     CVData, BatchUploadResponse, BatchStatusResponse, CandidateMatchResult,
-    UserCreate, Token, VerifyResponse,
+    UserCreate, Token, VerifyResponse, RetryExtractionResponse,
 )
 
 setup_logging()
@@ -341,6 +341,50 @@ async def get_batch_status(batch_id: str, db: Session = Depends(get_db), current
         status_counts[c.status] = status_counts.get(c.status, 0) + 1
 
     return BatchStatusResponse(batch_id=batch_id, total=len(candidates), status_counts=status_counts)
+
+
+@app.post("/candidates/{candidate_id}/retry-extraction", response_model=RetryExtractionResponse)
+async def retry_extraction(
+    candidate_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_verified_user),
+):
+    """Re-queue extraction for a candidate stuck in "failed" status (e.g.
+    from a since-fixed parsing bug) without re-uploading the file. Requires
+    verified email + counts against the daily usage cap, same as any other
+    LLM-cost path (/match, /candidates/batch) - the original failed attempt
+    already burned a unit of quota for a CV that never extracted, but not
+    re-checking the cap here would make retry-extraction an uncapped way to
+    keep hammering the LLM on a persistently bad response."""
+    candidate = db.query(Candidate).filter(
+        Candidate.id == candidate_id, Candidate.owner_id == current_user.id
+    ).first()
+    if not candidate:
+        raise HTTPException(404, "Candidate not found")
+
+    if candidate.status != "failed":
+        raise HTTPException(
+            400,
+            f"Candidate is not in a failed state (current status: '{candidate.status}') - nothing to retry.",
+        )
+
+    try:
+        check_and_increment_usage(current_user.id, count=1)
+    except UsageLimitExceeded as e:
+        raise HTTPException(429, str(e))
+
+    candidate.status = "pending"
+    db.commit()
+
+    queue_extraction(candidate.id, background_tasks)
+    logger.info("Re-queued extraction for candidate %d", candidate_id)
+
+    return RetryExtractionResponse(
+        candidate_id=candidate.id,
+        status=candidate.status,
+        message="Extraction re-queued.",
+    )
 
 
 @app.get("/jobs/{job_id}/match-batch/{batch_id}", response_model=List[CandidateMatchResult])

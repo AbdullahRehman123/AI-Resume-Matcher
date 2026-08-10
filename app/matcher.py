@@ -14,6 +14,7 @@ import json
 import logging
 import os
 from huggingface_hub import InferenceClient
+from app.json_utils import extract_json_object
 from app.schemas import CVData, JobRequirements, MatchResult
 
 logger = logging.getLogger(__name__)
@@ -126,12 +127,11 @@ def explain_match(cv: CVData, job: JobRequirements) -> dict:
         logger.exception("Explanation model call failed for job '%s'", job.title)
         raise
 
-    content = response.choices[0].message.content.strip().strip("`")
-    content = content.removeprefix("json").strip()
+    content = response.choices[0].message.content.strip()
     logger.debug("Raw explanation model response:\n%s", content)
 
     try:
-        result = json.loads(content)
+        result = extract_json_object(content)
     except json.JSONDecodeError:
         logger.exception("Could not parse explanation model output as JSON: %.200s", content)
         raise

@@ -8,6 +8,7 @@ import json
 import logging
 import os
 from huggingface_hub import InferenceClient
+from app.json_utils import extract_json_object
 from app.schemas import CVData
 
 logger = logging.getLogger(__name__)
@@ -85,15 +86,10 @@ def extract_structured_data(cv_text: str) -> CVData:
     logger.debug("Raw extraction model response:\n%s", content)
 
     try:
-        data = json.loads(content)
+        data = extract_json_object(content)
     except json.JSONDecodeError:
-        logger.warning("Extraction response wasn't clean JSON, retrying after stripping fences")
-        try:
-            content = content.strip("`").removeprefix("json").strip()
-            data = json.loads(content)
-        except json.JSONDecodeError:
-            logger.exception("Could not parse extraction model output as JSON: %.200s", content)
-            raise
+        logger.exception("Could not parse extraction model output as JSON: %.200s", content)
+        raise
 
     logger.info(
         "Extracted fields: name=%s, %d skills, %s years experience",
