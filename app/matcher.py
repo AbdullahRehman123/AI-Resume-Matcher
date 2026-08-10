@@ -1,7 +1,11 @@
 """Match a structured CV against a job posting.
 
-Stage 1: sentence-transformer embeddings give a fast, cheap similarity
-score - this is what scales to many CVs / many jobs.
+Stage 1: sentence embeddings give a fast, cheap similarity score - this is
+what scales to many CVs / many jobs. Computed via HF's hosted Inference
+API (same InferenceClient used for LLM calls below) rather than a local
+sentence-transformers model - PyTorch's memory footprint alone doesn't fit
+Render's 512MB free tier, and at MAX_BATCH_SIZE=5 there's no real
+performance case for computing embeddings locally anyway.
 Stage 2: the LLM only runs on the shortlist to explain the fit and
 call out gaps a plain similarity score would miss.
 """
@@ -9,7 +13,6 @@ call out gaps a plain similarity score would miss.
 import json
 import logging
 import os
-from sentence_transformers import SentenceTransformer, util
 from huggingface_hub import InferenceClient
 from app.schemas import CVData, JobRequirements, MatchResult
 
@@ -18,7 +21,6 @@ logger = logging.getLogger(__name__)
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 LLM_MODEL = os.getenv("MATCHER_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
 
-_embedder = SentenceTransformer(EMBED_MODEL)
 _client = InferenceClient(api_key=os.getenv("HF_TOKEN"), provider="auto")
 
 EXPLAIN_PROMPT = """You are screening a candidate for a job. Compare the
@@ -57,13 +59,44 @@ def compute_skill_overlap(cv_skills: list, required_skills: list) -> tuple:
     return matched, missing
 
 
+def get_embedding(text: str) -> list:
+    """Get a sentence embedding via HF's hosted Inference API. Same
+    try/except-log-reraise treatment as the LLM calls below (explain_match,
+    extractor.py's extract_structured_data) - a flaky/unavailable Inference
+    API is a real failure mode here now, not a local, near-infallible call."""
+    try:
+        embedding = _client.feature_extraction(text, model=EMBED_MODEL)
+    except Exception:
+        logger.exception("Embedding call failed for model %s", EMBED_MODEL)
+        raise
+
+    vector = embedding.tolist()
+    # sentence-transformers models return one pooled vector per input, but
+    # stay defensive about a nested [[...]] shape rather than assume it.
+    if vector and isinstance(vector[0], list):
+        vector = vector[0]
+    return vector
+
+
+def cosine_similarity(a: list, b: list) -> float:
+    """Pure-Python cosine similarity - no numpy needed, these vectors are
+    small (384-dim for all-MiniLM-L6-v2)."""
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(y * y for y in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
 def compute_similarity(cv: CVData, job: JobRequirements) -> float:
     cv_text = f"{cv.summary or ''} Skills: {', '.join(cv.skills)}"
     job_text = f"{job.description} Required skills: {', '.join(job.required_skills)}"
     logger.debug("Similarity input - CV: %s | Job: %s", cv_text, job_text)
 
-    embeddings = _embedder.encode([cv_text, job_text], convert_to_tensor=True)
-    score = util.cos_sim(embeddings[0], embeddings[1]).item()
+    cv_embedding = get_embedding(cv_text)
+    job_embedding = get_embedding(job_text)
+    score = cosine_similarity(cv_embedding, job_embedding)
     score = round(max(0.0, min(1.0, score)), 3)
     logger.info("Similarity score for job '%s': %.3f", job.title, score)
     return score
@@ -109,26 +142,31 @@ def explain_match(cv: CVData, job: JobRequirements) -> dict:
 
 
 def rank_candidates_by_similarity(candidates: list, job: JobRequirements) -> list:
-    """Batch version of compute_similarity - encodes every candidate plus
-    the job in ONE call instead of one call per candidate. This is the
-    step that makes thousands of CVs cheap: no LLM involved, just local
-    embedding math, so it scales freely regardless of batch size.
- 
+    """Batch version of compute_similarity - fetches the job embedding ONCE
+    and reuses it across every candidate, rather than re-fetching it per
+    candidate. Each candidate still needs its own Inference API call
+    (get_embedding takes one text at a time), so this is N+1 calls rather
+    than the single local-encode batch call it used to be - an inherent
+    cost of moving embeddings off this process, acceptable at
+    MAX_BATCH_SIZE=5.
+
     Returns scores in the SAME order as `candidates` (not sorted) -
     callers that need to pair scores back to a candidate ID should zip
     their own id list against this rather than relying on object identity.
     """
     job_text = f"{job.description} Required skills: {', '.join(job.required_skills)}"
-    cv_texts = [f"{c.summary or ''} Skills: {', '.join(c.skills)}" for c in candidates]
- 
-    logger.info("Bulk-encoding %d candidates against job '%s'", len(candidates), job.title)
-    all_embeddings = _embedder.encode([job_text] + cv_texts, convert_to_tensor=True)
-    job_embedding, cv_embeddings = all_embeddings[0], all_embeddings[1:]
- 
-    scores = util.cos_sim(job_embedding, cv_embeddings)[0]
-    return [round(max(0.0, min(1.0, s.item())), 3) for s in scores]
+    logger.info("Fetching job embedding once for '%s', reusing across %d candidates", job.title, len(candidates))
+    job_embedding = get_embedding(job_text)
 
- 
+    scores = []
+    for c in candidates:
+        cv_text = f"{c.summary or ''} Skills: {', '.join(c.skills)}"
+        cv_embedding = get_embedding(cv_text)
+        score = cosine_similarity(job_embedding, cv_embedding)
+        scores.append(round(max(0.0, min(1.0, score)), 3))
+    return scores
+
+
 def match_cv_to_job(cv: CVData, job: JobRequirements) -> MatchResult:
     logger.info("Matching CV '%s' against job '%s'", cv.name or "unknown", job.title)
     similarity = compute_similarity(cv, job)
