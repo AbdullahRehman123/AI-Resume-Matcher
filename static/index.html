@@ -377,7 +377,7 @@
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Request failed (${res.status})`);
       }
-      const { access_token, verification_link } = await res.json();
+      const { access_token, email_sent, verification_link } = await res.json();
       setSession(access_token, email);
       authForm.reset();
       // Logging in as a possibly-different user - wipe whatever the
@@ -386,10 +386,13 @@
       // something happens to re-fetch it.
       resetUserState();
       showAppView();
-      if (verification_link) {
-        // Dev-mode stand-in for actually emailing this - remove once real
-        // email sending is wired up on the backend.
-        verifyBanner.innerHTML = `Email sending isn't wired up yet — click this link to verify your account: ` +
+      if (email_sent) {
+        verifyBanner.textContent = 'Check your email to verify your account.';
+        verifyBanner.style.display = '';
+      } else if (verification_link) {
+        // Dev-mode fallback for when Resend isn't configured (or a send
+        // failed) - remove once real email sending is always available.
+        verifyBanner.innerHTML = `Email sending isn't fully configured yet — click this link to verify your account: ` +
           `<a href="${escapeHtml(verification_link)}" target="_blank" rel="noopener">${escapeHtml(verification_link)}</a>`;
         verifyBanner.style.display = '';
       }

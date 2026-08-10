@@ -123,7 +123,10 @@ class Token(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
-    # Only set by /auth/signup, and only until a real email provider (e.g.
-    # SendGrid or Postmark) is wired up - this is a dev-mode stand-in for
-    # actually emailing the verification link.
+    # Both only meaningful on /auth/signup's response (login leaves them at
+    # their defaults). email_sent reflects whether Resend actually sent the
+    # verification email; verification_link is the dev-mode fallback and is
+    # only populated when email_sent is False - once a real email goes out,
+    # the link isn't also leaked in the API response.
+    email_sent: bool = False
     verification_link: Optional[str] = None

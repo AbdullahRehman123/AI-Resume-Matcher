@@ -1,12 +1,17 @@
 """Background task: run structured extraction on one candidate's CV.
 
-Called once per candidate at upload time. Retries on transient failures
-(e.g. a flaky Inference API response) instead of silently failing.
+Called once per candidate at upload time.
 
-No owner_id check needed here: this task only mutates a specific
-candidate_id that was already created (with owner_id set) by the
-authenticated /candidates/batch upload that queued it - it doesn't take
-requests from a caller that could ask for someone else's candidate.
+No owner_id check needed here: this only mutates a specific candidate_id
+that was already created (with owner_id set) by the authenticated
+/candidates/batch upload that queued it - it doesn't take requests from a
+caller that could ask for someone else's candidate.
+
+run_extraction() is the actual work, deliberately decoupled from Celery so
+it can also run under FastAPI's BackgroundTasks (see TASK_BACKEND in
+main.py). extract_candidate_task is a thin Celery wrapper around it that
+adds retry-on-failure - BackgroundTasks has no equivalent, so that backend
+just doesn't retry (see the TASK_BACKEND comment in .env.example).
 """
 
 import logging
@@ -19,8 +24,11 @@ from app.extractor import extract_structured_data
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=15)
-def extract_candidate_task(self, candidate_id: int):
+def run_extraction(candidate_id: int) -> None:
+    """Look up the candidate, run structured extraction, and update its
+    fields/status. Re-raises on extraction failure (after marking the
+    candidate "failed" and committing) so callers can decide what to do -
+    the Celery wrapper retries, FastAPI's BackgroundTasks just logs it."""
     db = SessionLocal()
     try:
         candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
@@ -30,11 +38,11 @@ def extract_candidate_task(self, candidate_id: int):
 
         try:
             cv_data = extract_structured_data(candidate.raw_text)
-        except Exception as exc:
-            logger.exception("Extraction failed for candidate %d, retrying", candidate_id)
+        except Exception:
+            logger.exception("Extraction failed for candidate %d", candidate_id)
             candidate.status = "failed"
             db.commit()
-            raise self.retry(exc=exc)
+            raise
 
         if not cv_data.is_resume:
             candidate.status = "rejected"
@@ -57,3 +65,11 @@ def extract_candidate_task(self, candidate_id: int):
         db.commit()
     finally:
         db.close()
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=15)
+def extract_candidate_task(self, candidate_id: int):
+    try:
+        run_extraction(candidate_id)
+    except Exception as exc:
+        raise self.retry(exc=exc)

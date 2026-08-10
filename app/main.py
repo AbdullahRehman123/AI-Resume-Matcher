@@ -1,13 +1,14 @@
 """FastAPI app: upload a CV, match it against one or more jobs."""
 
 import logging
+import os
 import secrets
 import tempfile
 import uuid
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -18,8 +19,9 @@ from app.orm_models import JobPosting as JobPostingORM, Candidate, User
 from app.parser import extract_text
 from app.extractor import extract_structured_data
 from app.matcher import match_cv_to_job, rank_candidates_by_similarity, explain_match, compute_skill_overlap
-from app.tasks import extract_candidate_task
+from app.tasks import extract_candidate_task, run_extraction
 from app.auth import hash_password, verify_password, create_access_token, get_current_user, get_verified_user
+from app.email_service import send_verification_email
 from app.usage_limits import (
     check_and_increment_usage, UsageLimitExceeded,
     check_and_increment_signup_rate, SignupRateLimitExceeded,
@@ -42,8 +44,23 @@ app = FastAPI(title="CV-Job Matcher", version="0.1.0")
 # won't hold up.
 MAX_BATCH_SIZE = 5
 
+# Toggle for where CV extraction actually runs - "celery" (default) needs
+# Redis + a running worker; "fastapi" runs in-process via BackgroundTasks,
+# no worker needed, but with no automatic retry on failure. See
+# .env.example for when to use which.
+TASK_BACKEND = os.getenv("TASK_BACKEND", "celery")
+
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def queue_extraction(candidate_id: int, background_tasks: BackgroundTasks) -> None:
+    """Dispatch extraction to whichever backend TASK_BACKEND selects, so
+    call sites don't need to know which one is active."""
+    if TASK_BACKEND == "fastapi":
+        background_tasks.add_task(run_extraction, candidate_id)
+    else:
+        extract_candidate_task.delay(candidate_id)
 
 
 @app.get("/")
@@ -87,14 +104,30 @@ async def signup(body: UserCreate, request: Request, db: Session = Depends(get_d
     db.refresh(user)
     logger.info("Signed up new user id=%d", user.id)
 
-    # Placeholder until a real email provider (e.g. SendGrid or Postmark) is
-    # wired up: log the link and hand it back in the response body so the
-    # frontend can show it directly, instead of actually emailing it.
     verification_link = f"{request.base_url}auth/verify?token={verification_token}"
-    logger.info("Verification link for user id=%d (%s): %s", user.id, user.email, verification_link)
+
+    # Only attempt a real send if Resend is configured - RESEND_API_KEY is
+    # optional so local dev keeps working without it. If it IS configured
+    # but the send fails (network blip, bad FROM_EMAIL, etc.), fall back to
+    # the dev-mode link rather than losing the new user's ability to verify.
+    email_sent = False
+    if os.getenv("RESEND_API_KEY"):
+        email_sent = send_verification_email(user.email, verification_link)
+    else:
+        logger.info("RESEND_API_KEY not set - using dev-mode verification link instead of emailing")
+
+    if not email_sent:
+        # Placeholder until Resend (or another provider) is fully wired up
+        # for every environment: log the link and hand it back in the
+        # response body so the frontend can show it directly.
+        logger.info("Verification link for user id=%d (%s): %s", user.id, user.email, verification_link)
 
     token = create_access_token(data={"sub": str(user.id)})
-    return Token(access_token=token, verification_link=verification_link)
+    return Token(
+        access_token=token,
+        email_sent=email_sent,
+        verification_link=None if email_sent else verification_link,
+    )
 
 
 @app.get("/auth/verify", response_model=VerifyResponse)
@@ -230,7 +263,12 @@ async def match_cv(file: UploadFile = File(...), db: Session = Depends(get_db), 
 
 
 @app.post("/candidates/batch", response_model=BatchUploadResponse)
-async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_verified_user)):
+async def upload_batch(
+    background_tasks: BackgroundTasks,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_verified_user),
+):
     """Upload many CVs at once. Text is parsed synchronously (fast, local),
     but LLM extraction is queued as a background task per candidate -
     this endpoint returns immediately, it doesn't wait for extraction."""
@@ -282,7 +320,7 @@ async def upload_batch(files: List[UploadFile] = File(...), db: Session = Depend
         db.commit()
         db.refresh(candidate)
 
-        extract_candidate_task.delay(candidate.id)
+        queue_extraction(candidate.id, background_tasks)
         queued += 1
 
     logger.info("Batch %s: queued %d candidates, skipped %d", batch_id, queued, skipped)
